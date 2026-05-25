@@ -16,7 +16,7 @@ export function getPlayableTiles(mask: string[]): Tile[] {
 
 export function projectTile(tile: Tile, tileSize: TileSize, origin: TileOrigin) {
   return {
-    x: origin.x + (tile.col - tile.row) * (tileSize.width / 2),
+    x: origin.x + (tile.row - tile.col) * (tileSize.width / 2),
     y: origin.y + (tile.col + tile.row) * (tileSize.height / 2),
   };
 }
@@ -59,4 +59,3 @@ export function getStageBounds(mask: string[], tileSize: TileSize, origin: TileO
     minY,
   };
 }
-

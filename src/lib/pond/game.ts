@@ -11,6 +11,9 @@ import { getPlayableTiles } from "./geometry";
 export const MAX_CREEL_SIZE = 6;
 export const BITE_DELAY_MS = 900;
 export const BITE_WINDOW_MS = 1800;
+export const AUTO_CATCH_MS = 650;
+export const REEL_ANIMATION_MS = 850;
+export const CAST_RANGE_TILES = 6;
 
 const RARITY_MULTIPLIER = {
   common: 1,
@@ -171,4 +174,3 @@ export function moveTarget(
 
   return candidates[0] ?? current;
 }
-

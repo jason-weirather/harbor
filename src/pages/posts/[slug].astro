@@ -1,7 +1,6 @@
 ---
-import { getCollection, render } from "astro:content";
-import PondDock from "../../components/pond/PondDock.astro";
-import SiteLayout from "../../layouts/SiteLayout.astro";
+import { getCollection } from "astro:content";
+import GameLayout from "../../layouts/GameLayout.astro";
 
 export async function getStaticPaths() {
   const posts = await getCollection("posts");
@@ -13,24 +12,6 @@ export async function getStaticPaths() {
 }
 
 const { post } = Astro.props;
-const { Content } = await render(post);
 ---
 
-<SiteLayout title={post.data.title} description={post.data.summary}>
-  <article class="prose">
-    <header class="page-hero page-hero--article">
-      <p class="hero-kicker">{post.data.heroTag}</p>
-      <h1>{post.data.title}</h1>
-      <p class="hero-copy">{post.data.summary}</p>
-      <div class="article-meta">
-        <span>{post.data.authorName}</span>
-        <span>{post.data.publishedAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
-        <span>Placement: {post.data.pond?.placement.desktop ?? "none"}</span>
-      </div>
-    </header>
-    <Content />
-  </article>
-  <Fragment slot="aside">
-    <PondDock variant="sidecar" />
-  </Fragment>
-</SiteLayout>
+<GameLayout title={post.data.title} description={post.data.summary} />

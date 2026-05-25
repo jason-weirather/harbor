@@ -57,6 +57,7 @@ export function normalizeArtifact(filePath, parsed) {
     authorId: data.authorId,
     authorName: data.authorName,
     canonicalUrl: `/artifacts/${id}/`,
+    readingUrl: `/plain/artifacts/${id}/`,
     summary: data.summary,
     pointsBonus: data.pointsBonus ?? 0,
     disclosure: data.disclosure,
@@ -100,7 +101,10 @@ export function buildManifest({ pond, fish, spawnTables, artifacts }) {
       description: pond.description,
       mask: pond.mask,
       tile: pond.tile,
+      viewBox: pond.viewBox,
       origin: pond.origin,
+      shoreline: pond.shoreline ?? [],
+      reservedZones: pond.reservedZones ?? [],
     },
     fish,
     artifacts,
@@ -141,4 +145,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exitCode = 1;
   });
 }
-

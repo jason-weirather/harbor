@@ -1,0 +1,31 @@
+---
+import FishingGameShell from "../components/game/FishingGameShell";
+import manifest from "../generated/pond-manifest.json";
+import "../styles/site.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = "Harbor is a fishing-first prototype built on a static content base.",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta content={description} name="description" />
+    <title>{title} | Harbor</title>
+  </head>
+  <body class="game-body">
+    <script is:inline>
+      document.documentElement.dataset.js = "ready";
+    </script>
+    <FishingGameShell client:load manifest={manifest} title={title} />
+  </body>
+</html>

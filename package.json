@@ -10,6 +10,7 @@
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "pond:build": "node scripts/generate-pond-manifest.mjs",
+    "pretest": "node scripts/generate-pond-manifest.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

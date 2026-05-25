@@ -14,6 +14,7 @@ describe("generate-pond-manifest", () => {
     });
 
     expect(artifact.canonicalUrl).toBe("/artifacts/lantern-note/");
+    expect(artifact.readingUrl).toBe("/plain/artifacts/lantern-note/");
     expect(artifact.pointsBonus).toBe(4);
   });
 
@@ -26,6 +27,7 @@ describe("generate-pond-manifest", () => {
           description: "desc",
           mask: ["1"],
           tile: { width: 10, height: 10 },
+          viewBox: { width: 100, height: 100 },
           origin: { x: 0, y: 0 },
         },
         fish: [],
@@ -35,4 +37,3 @@ describe("generate-pond-manifest", () => {
     ).toThrow(/ghost-fish/);
   });
 });
-

@@ -1,6 +1,6 @@
 ---
-import { getCollection, render } from "astro:content";
-import SiteLayout from "../../layouts/SiteLayout.astro";
+import { getCollection } from "astro:content";
+import GameLayout from "../../layouts/GameLayout.astro";
 
 export async function getStaticPaths() {
   const artifacts = await getCollection("artifacts");
@@ -12,23 +12,6 @@ export async function getStaticPaths() {
 }
 
 const { artifact } = Astro.props;
-const { Content } = await render(artifact);
 ---
 
-<SiteLayout title={artifact.data.title} description={artifact.data.summary}>
-  <article class="prose artifact-prose">
-    <header class="page-hero page-hero--compact">
-      <p class="hero-kicker">{artifact.data.type.replace("_", " ")}</p>
-      <h1>{artifact.data.title}</h1>
-      <p class="hero-copy">{artifact.data.summary}</p>
-      <div class="article-meta">
-        <span>{artifact.data.authorName}</span>
-        {artifact.data.disclosure && <span>{artifact.data.disclosure}</span>}
-      </div>
-    </header>
-    <Content />
-    <p>
-      <a href="/artifacts/">Back to all artifacts</a>
-    </p>
-  </article>
-</SiteLayout>
+<GameLayout title={artifact.data.title} description={artifact.data.summary} />

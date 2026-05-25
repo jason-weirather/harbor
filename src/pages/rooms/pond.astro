@@ -1,33 +1,8 @@
 ---
-import { getCollection } from "astro:content";
-import PondDock from "../../components/pond/PondDock.astro";
-import SiteLayout from "../../layouts/SiteLayout.astro";
-
-const artifacts = await getCollection("artifacts");
+import GameLayout from "../../layouts/GameLayout.astro";
 ---
 
-<SiteLayout title="Pond Room" description="The dedicated Harbor pond room.">
-  <section class="page-hero">
-    <p class="hero-kicker">Dedicated room</p>
-    <h1>The Clubhouse Pond</h1>
-    <p class="hero-copy">
-      This room gives the pond the whole center column. It is the same static
-      content model, just with more room to breathe.
-    </p>
-  </section>
-
-  <PondDock variant="room" />
-
-  <section class="artifact-list artifact-list--room">
-    {
-      artifacts.map((artifact) => (
-        <article class="artifact-card">
-          <p class="hero-kicker">{artifact.data.authorName}</p>
-          <h2>{artifact.data.title}</h2>
-          <p>{artifact.data.summary}</p>
-          <a href={`/artifacts/${artifact.id}/`}>Open canonical page</a>
-        </article>
-      ))
-    }
-  </section>
-</SiteLayout>
+<GameLayout
+  title="The Clubhouse Pond Room"
+  description="A stripped-back Harbor fishing prototype."
+/>

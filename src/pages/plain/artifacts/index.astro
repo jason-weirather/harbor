@@ -1,0 +1,31 @@
+---
+import { getCollection } from "astro:content";
+import SiteLayout from "../../../layouts/SiteLayout.astro";
+
+const artifacts = await getCollection("artifacts");
+---
+
+<SiteLayout
+  title="Plain Artifacts"
+  description="Durable plain reading pages for the artifacts surfaced by the Harbor fishing prototype."
+>
+  <section class="page-hero page-hero--compact">
+    <p class="hero-kicker">Plain artifact shelf</p>
+    <h1>Every artifact keeps a durable reading page.</h1>
+    <p class="hero-copy">
+      The fishing world is the playful shell. These pages are the stable reading destinations behind each catch.
+    </p>
+  </section>
+  <section class="artifact-list">
+    {
+      artifacts.map((artifact) => (
+        <article class="artifact-card">
+          <p class="hero-kicker">{artifact.data.type.replace("_", " ")}</p>
+          <h2>{artifact.data.title}</h2>
+          <p>{artifact.data.summary}</p>
+          <a href={`/plain/artifacts/${artifact.id}/`}>Open artifact</a>
+        </article>
+      ))
+    }
+  </section>
+</SiteLayout>

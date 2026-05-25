@@ -7,6 +7,7 @@ export type ArtifactType =
   | "demo_note";
 
 export type FishRarity = "common" | "uncommon" | "rare" | "oddball";
+export type LandTerrain = "grass" | "sand" | "path" | "dock";
 
 export type GameState =
   | "idle"
@@ -30,13 +31,36 @@ export interface TileOrigin {
   y: number;
 }
 
+export interface ViewBox {
+  width: number;
+  height: number;
+}
+
+export interface ShoreTile extends Tile {
+  terrain?: LandTerrain;
+  dock?: boolean;
+  castable?: boolean;
+}
+
+export interface ReservedZone {
+  id?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label?: string;
+}
+
 export interface PondDefinition {
   id: string;
   name: string;
   description: string;
   mask: string[];
   tile: TileSize;
+  viewBox: ViewBox;
   origin: TileOrigin;
+  shoreline: ShoreTile[];
+  reservedZones: ReservedZone[];
 }
 
 export interface FishTemplate {
@@ -57,6 +81,7 @@ export interface ArtifactSummary {
   authorId: string;
   authorName: string;
   canonicalUrl: string;
+  readingUrl: string;
   summary: string;
   pointsBonus: number;
   disclosure?: string;
@@ -94,4 +119,3 @@ export interface CatchInstance {
   blurb: string;
   state: "kept" | "released";
 }
-

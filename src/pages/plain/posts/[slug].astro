@@ -1,0 +1,35 @@
+---
+import { getCollection, render } from "astro:content";
+import SiteLayout from "../../../layouts/SiteLayout.astro";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("posts");
+
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+---
+
+<SiteLayout title={`${post.data.title} Plain`} description={post.data.summary}>
+  <article class="prose">
+    <header class="page-hero page-hero--article">
+      <p class="hero-kicker">Plain reading fallback</p>
+      <h1>{post.data.title}</h1>
+      <p class="hero-copy">{post.data.summary}</p>
+      <div class="article-meta">
+        <span>{post.data.authorName}</span>
+        <span>{post.data.publishedAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+        <span>
+          <a href={`/posts/${post.id}/`}>Back to world view</a>
+        </span>
+      </div>
+    </header>
+    <Content />
+  </article>
+</SiteLayout>
+

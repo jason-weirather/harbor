@@ -1,0 +1,39 @@
+---
+const pathname = Astro.url.pathname;
+
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/posts/a-quiet-cast-into-harbor/", label: "Library" },
+  { href: "/rooms/pond/", label: "Pond Room" },
+  { href: "/artifacts/", label: "Artifacts" },
+];
+---
+
+<nav class="site-nav" aria-label="Primary">
+  <a class="site-nav__brand" href="/">
+    <span class="site-nav__eyebrow">Harbor</span>
+    <strong>The Clubhouse Pond</strong>
+  </a>
+  <p class="site-nav__intro">
+    Static-first writing, playful rooms, and a small isometric fishing toy that
+    reveals durable artifact links.
+  </p>
+  <div class="site-nav__links">
+    {
+      links.map((link) => (
+        <a
+          class:list={["site-nav__link", pathname === link.href && "is-active"]}
+          href={link.href}
+        >
+          {link.label}
+        </a>
+      ))
+    }
+  </div>
+  <div class="site-nav__note">
+    <p>Mask model</p>
+    <strong>0 / 1 / 2</strong>
+    <span>Scenery, playable pond, status row.</span>
+  </div>
+</nav>
+

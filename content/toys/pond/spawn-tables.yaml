@@ -1,0 +1,11 @@
+- id: default
+  entries:
+    - fishId: lantern-koi
+      weight: 5
+    - fishId: library-carp
+      weight: 4
+    - fishId: oracle-eel
+      weight: 3
+    - fishId: clockwork-betta
+      weight: 1
+

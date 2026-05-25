@@ -1,0 +1,29 @@
+- id: lantern-koi
+  name: Lantern Koi
+  rarity: common
+  basePoints: 7
+  accent: "#f59e0b"
+  blurb: A warm little flash that almost looks like a floating idea.
+  artifactChance: 0.75
+- id: library-carp
+  name: Library Carp
+  rarity: common
+  basePoints: 6
+  accent: "#2f7f7a"
+  blurb: Slow, thoughtful, and somehow always circling the reading dock.
+  artifactChance: 0.55
+- id: oracle-eel
+  name: Oracle Eel
+  rarity: uncommon
+  basePoints: 11
+  accent: "#2563eb"
+  blurb: A quick silver ribbon with a tendency to pull in replies and prophecies.
+  artifactChance: 0.9
+- id: clockwork-betta
+  name: Clockwork Betta
+  rarity: rare
+  basePoints: 15
+  accent: "#ef4444"
+  blurb: Bright fins, sharp timing, and a habit of surfacing when demos are almost ready.
+  artifactChance: 1
+

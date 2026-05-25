@@ -1,0 +1,29 @@
+---
+import { getCollection } from "astro:content";
+import SiteLayout from "../../layouts/SiteLayout.astro";
+
+const artifacts = await getCollection("artifacts");
+---
+
+<SiteLayout title="Artifacts" description="Canonical artifact pages surfaced by the Harbor pond toy.">
+  <section class="page-hero page-hero--compact">
+    <p class="hero-kicker">Artifact shelf</p>
+    <h1>Every fish artifact keeps its own page.</h1>
+    <p class="hero-copy">
+      The pond is only the wrapper. The meaningful thing is the artifact that can
+      still be read, linked, and rebuilt later.
+    </p>
+  </section>
+  <section class="artifact-list">
+    {
+      artifacts.map((artifact) => (
+        <article class="artifact-card">
+          <p class="hero-kicker">{artifact.data.type.replace("_", " ")}</p>
+          <h2>{artifact.data.title}</h2>
+          <p>{artifact.data.summary}</p>
+          <a href={`/artifacts/${artifact.id}/`}>Open artifact</a>
+        </article>
+      ))
+    }
+  </section>
+</SiteLayout>

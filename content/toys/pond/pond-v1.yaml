@@ -1,0 +1,20 @@
+id: clubhouse-pond-v1
+name: Clubhouse Pond
+description: A static-first pond where fish can reveal tiny notes, responses, and artifacts.
+mask:
+  - "000000"
+  - "000000"
+  - "100000"
+  - "100000"
+  - "110000"
+  - "111000"
+  - "111110"
+  - "111111"
+  - "222222"
+tile:
+  width: 72
+  height: 36
+origin:
+  x: 264
+  y: 104
+

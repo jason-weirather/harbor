@@ -1,0 +1,38 @@
+---
+import SiteNav from "../components/SiteNav.astro";
+import "../styles/site.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "Harbor is a static-first clubhouse for readable posts and playful rooms." } =
+  Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta content={description} name="description" />
+    <title>{title} | Harbor</title>
+  </head>
+  <body>
+    <script is:inline>
+      document.documentElement.dataset.js = "ready";
+    </script>
+    <div class="page-glow" aria-hidden="true"></div>
+    <div class="clubhouse-shell">
+      <SiteNav />
+      <main class="main-panel">
+        <slot />
+      </main>
+      <aside class="toy-panel">
+        <slot name="aside" />
+      </aside>
+    </div>
+  </body>
+</html>
+

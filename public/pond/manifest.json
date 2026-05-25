@@ -1,0 +1,127 @@
+{
+  "pond": {
+    "id": "clubhouse-pond-v1",
+    "name": "Clubhouse Pond",
+    "description": "A static-first pond where fish can reveal tiny notes, responses, and artifacts.",
+    "mask": [
+      "000000",
+      "000000",
+      "100000",
+      "100000",
+      "110000",
+      "111000",
+      "111110",
+      "111111",
+      "222222"
+    ],
+    "tile": {
+      "width": 72,
+      "height": 36
+    },
+    "origin": {
+      "x": 264,
+      "y": 104
+    }
+  },
+  "fish": [
+    {
+      "id": "lantern-koi",
+      "name": "Lantern Koi",
+      "rarity": "common",
+      "basePoints": 7,
+      "accent": "#f59e0b",
+      "blurb": "A warm little flash that almost looks like a floating idea.",
+      "artifactChance": 0.75
+    },
+    {
+      "id": "library-carp",
+      "name": "Library Carp",
+      "rarity": "common",
+      "basePoints": 6,
+      "accent": "#2f7f7a",
+      "blurb": "Slow, thoughtful, and somehow always circling the reading dock.",
+      "artifactChance": 0.55
+    },
+    {
+      "id": "oracle-eel",
+      "name": "Oracle Eel",
+      "rarity": "uncommon",
+      "basePoints": 11,
+      "accent": "#2563eb",
+      "blurb": "A quick silver ribbon with a tendency to pull in replies and prophecies.",
+      "artifactChance": 0.9
+    },
+    {
+      "id": "clockwork-betta",
+      "name": "Clockwork Betta",
+      "rarity": "rare",
+      "basePoints": 15,
+      "accent": "#ef4444",
+      "blurb": "Bright fins, sharp timing, and a habit of surfacing when demos are almost ready.",
+      "artifactChance": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "dock-checklist",
+      "slug": "dock-checklist",
+      "title": "Dock Checklist",
+      "type": "demo_note",
+      "authorId": "humans/josh",
+      "authorName": "Josh",
+      "canonicalUrl": "/artifacts/dock-checklist/",
+      "summary": "Three things worth checking before the next Harbor room ships.",
+      "pointsBonus": 3,
+      "external": false
+    },
+    {
+      "id": "lantern-note",
+      "slug": "lantern-note",
+      "title": "Lantern Note",
+      "type": "mini_post",
+      "authorId": "humans/josh",
+      "authorName": "Josh",
+      "canonicalUrl": "/artifacts/lantern-note/",
+      "summary": "Ship the smallest shimmer that proves the room has a pulse.",
+      "pointsBonus": 4,
+      "external": false
+    },
+    {
+      "id": "oracle-finch-wake",
+      "slug": "oracle-finch-wake",
+      "title": "Oracle Finch and the Wake Behind the Bobber",
+      "type": "response",
+      "authorId": "ai/oracle-finch",
+      "authorName": "Oracle Finch",
+      "canonicalUrl": "/artifacts/oracle-finch-wake/",
+      "summary": "A curated AI response about why playful interfaces still need edges.",
+      "pointsBonus": 6,
+      "disclosure": "AI-authored, human-reviewed.",
+      "external": false
+    }
+  ],
+  "spawnTables": [
+    {
+      "id": "default",
+      "entries": [
+        {
+          "fishId": "lantern-koi",
+          "weight": 5
+        },
+        {
+          "fishId": "library-carp",
+          "weight": 4
+        },
+        {
+          "fishId": "oracle-eel",
+          "weight": 3
+        },
+        {
+          "fishId": "clockwork-betta",
+          "weight": 1
+        }
+      ]
+    }
+  ],
+  "generatedAt": "2026-05-25T20:02:45.126Z"
+}

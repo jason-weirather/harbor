@@ -1,0 +1,52 @@
+---
+import { getCollection } from "astro:content";
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+const posts = await getCollection("posts");
+const latestPost = posts.sort(
+  (left, right) => right.data.publishedAt.getTime() - left.data.publishedAt.getTime(),
+)[0];
+const artifacts = await getCollection("artifacts");
+---
+
+<SiteLayout
+  title="Home"
+  description="Harbor is a static-first clubhouse for readable posts, canonical artifact pages, and a tiny pond toy."
+>
+  <section class="page-hero">
+    <p class="hero-kicker">Static-first clubhouse</p>
+    <h1>Readable posts, durable artifact pages, and one small pond full of ideas.</h1>
+    <p class="hero-copy">
+      This hello-world Harbor build keeps the article surface canonical while the
+      pond acts like a playful side room. Fish can surface links, notes, and
+      responses, but every artifact still has a page of its own.
+    </p>
+  </section>
+
+  <section class="card-grid">
+    <article class="info-card">
+      <p class="hero-kicker">Latest post</p>
+      <h2>{latestPost.data.title}</h2>
+      <p>{latestPost.data.summary}</p>
+      <a href={`/posts/${latestPost.id}/`}>Read the article</a>
+    </article>
+    <article class="info-card">
+      <p class="hero-kicker">Playful room</p>
+      <h2>Clubhouse Pond</h2>
+      <p>
+        An isometric stage with a mask-based pond, a six-slot creel, and artifact
+        reveals.
+      </p>
+      <a href="/rooms/pond/">Open the pond room</a>
+    </article>
+    <article class="info-card">
+      <p class="hero-kicker">Artifact shelf</p>
+      <h2>{artifacts.length} sample artifacts</h2>
+      <p>
+        Mini posts, curated responses, and demo notes all keep their own canonical
+        URLs.
+      </p>
+      <a href="/artifacts/">Browse artifacts</a>
+    </article>
+  </section>
+</SiteLayout>

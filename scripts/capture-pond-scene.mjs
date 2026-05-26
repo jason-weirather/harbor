@@ -17,6 +17,8 @@ const require = createRequire(import.meta.url);
 function parseArgs(argv) {
   const options = {
     build: true,
+    cast: undefined,
+    castSettleMs: 2400,
     height: DEFAULT_HEIGHT,
     move: undefined,
     moveSettleMs: DEFAULT_MOVE_SETTLE_MS,
@@ -61,6 +63,18 @@ function parseArgs(argv) {
 
     if (value === "--move") {
       options.move = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === "--cast") {
+      options.cast = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === "--cast-settle-ms") {
+      options.castSettleMs = Number.parseInt(argv[index + 1], 10);
       index += 1;
       continue;
     }
@@ -215,6 +229,7 @@ async function main() {
   const outputPath = resolve(projectRoot, options.out);
   const outputDir = dirname(outputPath);
   const moveTarget = parseTileCoordinate(options.move);
+  const castTarget = parseTileCoordinate(options.cast);
   const routePath = options.route.startsWith("/") ? options.route : `/${options.route}`;
   const baseUrl = `http://127.0.0.1:${options.port}`;
   const targetUrl = `${baseUrl}${routePath}`;
@@ -262,6 +277,11 @@ async function main() {
       await page.waitForTimeout(options.moveSettleMs);
     }
 
+    if (castTarget) {
+      await page.getByTestId(`tile-${castTarget.row}-${castTarget.col}`).click();
+      await page.waitForTimeout(options.castSettleMs);
+    }
+
     const scene = page.locator(".fishing-game__scene");
     await scene.screenshot({
       path: outputPath,
@@ -272,6 +292,7 @@ async function main() {
     console.log(
       JSON.stringify({
         outputPath,
+        castTarget,
         moveTarget,
         route: routePath,
         sceneHeight: Math.round(box?.height ?? 0),

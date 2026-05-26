@@ -12,7 +12,8 @@ export const MAX_CREEL_SIZE = 6;
 export const BITE_DELAY_MS = 900;
 export const BITE_WINDOW_MS = 1800;
 export const AUTO_CATCH_MS = 650;
-export const REEL_ANIMATION_MS = 850;
+export const REEL_ANIMATION_MS = 1700;
+export const INSPECTION_MS = 1000;
 export const CAST_RANGE_TILES = 6;
 
 const RARITY_MULTIPLIER = {
@@ -105,9 +106,14 @@ export function resolveCatch(
   target: Tile,
   random: () => number,
   castNumber: number,
+  forcedFishId?: string,
 ): CatchInstance {
   const spawnTable = manifest.spawnTables[0];
-  const fish = pickFish(manifest.fish, spawnTable.entries, random);
+  const fish =
+    forcedFishId
+      ? manifest.fish.find((candidate) => candidate.id === forcedFishId) ??
+        pickFish(manifest.fish, spawnTable.entries, random)
+      : pickFish(manifest.fish, spawnTable.entries, random);
   const artifact = pickArtifact(manifest.artifacts, fish, random);
   const points =
     Math.round(fish.basePoints * RARITY_MULTIPLIER[fish.rarity]) +

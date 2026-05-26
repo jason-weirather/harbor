@@ -1,7 +1,26 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import manifest from "../../generated/pond-manifest.json";
-import { AUTO_CATCH_MS, BITE_DELAY_MS, REEL_ANIMATION_MS } from "../../lib/pond/game";
 import FishingGameShell from "./FishingGameShell";
+
+function advanceUntil(assertion: () => void, totalMs = 30000, stepMs = 500) {
+  let lastError: unknown;
+
+  for (let elapsed = 0; elapsed <= totalMs; elapsed += stepMs) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      act(() => {
+        vi.advanceTimersByTime(stepMs);
+      });
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+}
 
 describe("FishingGameShell", () => {
   beforeEach(() => {
@@ -18,32 +37,33 @@ describe("FishingGameShell", () => {
     fireEvent.click(screen.getByTestId("shore-3-10"));
     fireEvent.click(screen.getByTestId("tile-7-4"));
 
-    act(() => {
-      vi.advanceTimersByTime(BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + 10);
+    advanceUntil(() => {
+      expect(screen.getByText(/Rail 1\/6/)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Rail 1\/6/)).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/Lantern Koi|Library Carp|Oracle Eel|Clockwork Betta/).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Lantern Koi|Library Carp|Oracle Eel|Clockwork Betta/).length).toBeGreaterThan(0);
   });
 
   it("allows the player to move along shoreline tiles", () => {
     render(<FishingGameShell manifest={manifest} />);
 
-    fireEvent.click(screen.getByTestId("shore-3-10"));
+    fireEvent.click(screen.getByTestId("shore-2-9"));
 
-    expect(screen.getByText(/Stand 3:10/)).toBeInTheDocument();
+    expect(screen.getByText(/Walking to bank tile 2:9/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("tile-7-4"));
+    expect(screen.getByText(/Let the fisher finish walking before you cast again./)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1200);
+    });
+
+    expect(screen.getByText(/Stand 2:9/)).toBeInTheDocument();
   });
 
   it("refuses water casts that are farther than six tiles away", () => {
     render(<FishingGameShell manifest={manifest} />);
 
     fireEvent.click(screen.getByTestId("tile-12-0"));
-
-    act(() => {
-      vi.advanceTimersByTime(BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + 10);
-    });
 
     expect(
       screen.getByText(/That water is too far away. Move closer and cast within 6 squares./),
@@ -57,22 +77,18 @@ describe("FishingGameShell", () => {
     fireEvent.click(screen.getByTestId("shore-3-10"));
     fireEvent.click(screen.getByTestId("tile-7-4"));
 
-    act(() => {
-      vi.advanceTimersByTime(BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + 10);
+    advanceUntil(() => {
+      expect(screen.getByText(/Rail 1\/6/)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Rail 1\/6/)).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + 10);
-    });
-
-    expect(screen.getByText(/Rail 2\/6/)).toBeInTheDocument();
+    advanceUntil(() => {
+      expect(screen.getByText(/Rail 2\/6/)).toBeInTheDocument();
+    }, 40000);
 
     fireEvent.click(screen.getByTestId("shore-2-9"));
 
     act(() => {
-      vi.advanceTimersByTime(BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + 10);
+      vi.advanceTimersByTime(3000);
     });
 
     expect(screen.getByText(/Stand 2:9/)).toBeInTheDocument();
@@ -103,14 +119,12 @@ describe("FishingGameShell", () => {
     fireEvent.click(screen.getByTestId("shore-3-10"));
     fireEvent.click(screen.getByTestId("tile-7-4"));
 
-    act(() => {
-      vi.advanceTimersByTime(BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + 10);
+    advanceUntil(() => {
+      expect(screen.getByRole("link", { name: /Read artifact:/ })).toHaveAttribute(
+        "href",
+        "/plain/artifacts/dock-checklist/",
+      );
     });
-
-    expect(screen.getByRole("link", { name: /Read artifact:/ })).toHaveAttribute(
-      "href",
-      "/plain/artifacts/dock-checklist/",
-    );
   });
 
   it("can minimize and expand the catch rail without hiding the game status", () => {

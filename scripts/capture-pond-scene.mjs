@@ -10,6 +10,7 @@ const DEFAULT_PORT = 4173;
 const DEFAULT_WIDTH = 1758;
 const DEFAULT_HEIGHT = 1035;
 const DEFAULT_OUTPUT = "tmp/pond-scene.png";
+const DEFAULT_MOVE_SETTLE_MS = 1800;
 
 const require = createRequire(import.meta.url);
 
@@ -18,6 +19,7 @@ function parseArgs(argv) {
     build: true,
     height: DEFAULT_HEIGHT,
     move: undefined,
+    moveSettleMs: DEFAULT_MOVE_SETTLE_MS,
     out: DEFAULT_OUTPUT,
     port: DEFAULT_PORT,
     route: DEFAULT_ROUTE,
@@ -65,6 +67,11 @@ function parseArgs(argv) {
 
     if (value === "--skip-build") {
       options.build = false;
+    }
+
+    if (value === "--move-settle-ms") {
+      options.moveSettleMs = Number.parseInt(argv[index + 1], 10);
+      index += 1;
     }
   }
 
@@ -252,7 +259,7 @@ async function main() {
 
     if (moveTarget) {
       await page.getByTestId(`shore-${moveTarget.row}-${moveTarget.col}`).click();
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(options.moveSettleMs);
     }
 
     const scene = page.locator(".fishing-game__scene");

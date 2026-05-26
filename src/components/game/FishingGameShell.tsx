@@ -4,6 +4,7 @@ import {
   AUTO_CATCH_MS,
   BITE_DELAY_MS,
   CAST_RANGE_TILES,
+  INSPECTION_MS,
   MAX_CREEL_SIZE,
   REEL_ANIMATION_MS,
   canCast,
@@ -14,6 +15,7 @@ import { getPlayableTiles, projectTile } from "../../lib/pond/geometry";
 import type {
   ArtifactSummary,
   CatchInstance,
+  FishTemplate,
   PondManifest,
   ShoreTile,
   Tile,
@@ -26,15 +28,30 @@ interface FishingGameShellProps {
   title?: string;
 }
 
-type GameMode = "idle" | "waiting" | "hooked" | "reeling" | "inventory-full";
+type GameMode =
+  | "idle"
+  | "walking"
+  | "waiting"
+  | "hooked"
+  | "reeling"
+  | "inspecting"
+  | "inventory-full";
 
 interface AmbientFish {
-  tile: Tile;
+  id: string;
+  fishId: string;
   accent: string;
-  delay: number;
-  duration: number;
+  fromTile: Tile;
+  toTile: Tile;
+  previousTile?: Tile;
+  segmentStartedAt: number;
+  segmentDuration: number;
   direction: 1 | -1;
   size: number;
+  phase: number;
+  active: boolean;
+  respawnAt?: number;
+  expiresAt: number;
 }
 
 interface BackdropTile extends Tile {
@@ -45,6 +62,26 @@ interface FisherPose {
   bob: number;
   rodLift: number;
   armLift: number;
+  swayX: number;
+  torsoLean: number;
+  frontLegLift: number;
+  backLegLift: number;
+  frontStep: number;
+  backStep: number;
+}
+
+interface MovementPath {
+  tiles: ShoreTile[];
+  startedAt: number;
+  segmentDuration: number;
+}
+
+interface EncounterContext {
+  target: Tile;
+  castNumber: number;
+  fishId: string;
+  fishScale: number;
+  direction: 1 | -1;
 }
 
 function getArtifact(manifest: PondManifest, artifactId?: string) {
@@ -104,12 +141,20 @@ function getStatusHeading(
   targetTile: Tile | undefined,
   isCreelFull: boolean,
 ) {
+  if (gameState === "walking") {
+    return "Changing spots";
+  }
+
   if (gameState === "hooked") {
     return "Fish on the line";
   }
 
   if (gameState === "reeling") {
     return "Reeling it in";
+  }
+
+  if (gameState === "inspecting") {
+    return "Inspecting the catch";
   }
 
   if (gameState === "waiting") {
@@ -199,6 +244,102 @@ function getTileFill(terrain: BackdropTile["terrain"] | ShoreTile["terrain"], do
   return "#99d15f";
 }
 
+function buildShoreNeighborMap(shoreline: ShoreTile[]) {
+  const shorelineByKey = new Map(shoreline.map((tile) => [getTileKey(tile), tile] as const));
+  const neighbors = new Map<string, ShoreTile[]>();
+
+  for (const tile of shoreline) {
+    const adjacent: ShoreTile[] = [];
+
+    for (let rowStep = -1; rowStep <= 1; rowStep += 1) {
+      for (let colStep = -1; colStep <= 1; colStep += 1) {
+        if (rowStep === 0 && colStep === 0) {
+          continue;
+        }
+
+        const nextTile = shorelineByKey.get(
+          getTileKey({
+            row: tile.row + rowStep,
+            col: tile.col + colStep,
+          }),
+        );
+
+        if (nextTile) {
+          adjacent.push(nextTile);
+        }
+      }
+    }
+
+    neighbors.set(getTileKey(tile), adjacent);
+  }
+
+  return neighbors;
+}
+
+function findShorePath(
+  start: ShoreTile,
+  goal: ShoreTile,
+  neighborMap: Map<string, ShoreTile[]>,
+) {
+  if (tileMatches(start, goal)) {
+    return [start];
+  }
+
+  const startKey = getTileKey(start);
+  const goalKey = getTileKey(goal);
+  const queue: ShoreTile[] = [start];
+  const visited = new Set<string>([startKey]);
+  const parent = new Map<string, string>();
+  const shorelineByKey = new Map<string, ShoreTile>([[startKey, start]]);
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (!current) {
+      break;
+    }
+
+    const currentKey = getTileKey(current);
+
+    if (currentKey === goalKey) {
+      break;
+    }
+
+    for (const neighbor of neighborMap.get(currentKey) ?? []) {
+      const neighborKey = getTileKey(neighbor);
+
+      if (visited.has(neighborKey)) {
+        continue;
+      }
+
+      visited.add(neighborKey);
+      parent.set(neighborKey, currentKey);
+      shorelineByKey.set(neighborKey, neighbor);
+      queue.push(neighbor);
+    }
+  }
+
+  if (!visited.has(goalKey)) {
+    return [start, goal];
+  }
+
+  const path: ShoreTile[] = [];
+  let cursor = goalKey;
+
+  while (cursor) {
+    const tile = cursor === startKey ? start : shorelineByKey.get(cursor) ?? goal;
+    path.push(tile);
+
+    if (cursor === startKey) {
+      break;
+    }
+
+    cursor = parent.get(cursor) ?? "";
+  }
+
+  return path.reverse();
+}
+
 function mixHex(base: string, tint: string, amount: number) {
   const normalize = (value: string) => value.replace("#", "");
   const source = normalize(base);
@@ -216,20 +357,64 @@ function mixHex(base: string, tint: string, amount: number) {
   return `rgb(${blend(from.r, to.r)}, ${blend(from.g, to.g)}, ${blend(from.b, to.b)})`;
 }
 
-function getFisherPose(mode: GameMode, frame: number): FisherPose {
+function getFisherPose(mode: GameMode, motion: number): FisherPose {
+  if (mode === "walking") {
+    const stride = Math.sin(motion * 1.9);
+
+    return {
+      bob: Math.abs(stride) * 2.1,
+      rodLift: 4 + Math.cos(motion * 1.2) * 1.3,
+      armLift: 2 + Math.max(0, stride) * 1.8,
+      swayX: stride * 1.7,
+      torsoLean: 1.3 + Math.max(0, stride) * 0.7,
+      frontLegLift: stride > 0 ? Math.abs(stride) * 3.1 : 0,
+      backLegLift: stride < 0 ? Math.abs(stride) * 3.1 : 0,
+      frontStep: stride * 2.6,
+      backStep: -stride * 2.3,
+    };
+  }
+
+  const idleWave = Math.sin(motion * 0.72);
+  const patientWave = Math.sin(motion * 0.36 + 0.8);
+
   return {
-    bob: mode === "idle" ? frame % 2 : 0,
-    rodLift: mode === "hooked" ? 7 : mode === "reeling" ? 11 : mode === "waiting" ? 4 : 2,
-    armLift: mode === "reeling" ? 4 : mode === "hooked" ? 2 : 0,
+    bob: mode === "inspecting" ? 0.6 : Math.max(0, idleWave) * 1.35,
+    rodLift:
+      mode === "inspecting"
+        ? 15
+        : mode === "hooked"
+          ? 8 + idleWave * 0.8
+          : mode === "reeling"
+            ? 12 + patientWave * 0.8
+            : mode === "waiting"
+              ? 4 + patientWave * 1.1
+              : 3 + patientWave * 0.7,
+    armLift:
+      mode === "inspecting"
+        ? 6
+        : mode === "reeling"
+          ? 4 + idleWave * 0.6
+          : mode === "hooked"
+            ? 2.8 + patientWave * 0.5
+            : 1 + patientWave * 0.5,
+    swayX: mode === "waiting" ? idleWave * 1.2 : patientWave * 0.65,
+    torsoLean:
+      mode === "reeling" ? 1.8 : mode === "hooked" ? 1.2 : mode === "waiting" ? 0.8 : 0.5,
+    frontLegLift: 0,
+    backLegLift: 0,
+    frontStep: 0,
+    backStep: 0,
   };
 }
 
-function getRodTipPosition(x: number, y: number, mode: GameMode, frame: number, scale = 1) {
-  const pose = getFisherPose(mode, frame);
+function getRodTipPosition(x: number, y: number, mode: GameMode, motion: number, scale = 1) {
+  const pose = getFisherPose(mode, motion);
+  const rodBaseX = x + (8 + pose.swayX) * scale;
+  const rodBaseY = y + (1 + pose.bob - pose.armLift * 0.35) * scale;
 
   return {
-    x: x + 30 * scale,
-    y: y - (26 + pose.rodLift) * scale + pose.bob * scale,
+    x: rodBaseX + 22 * scale,
+    y: rodBaseY - (29 + pose.rodLift) * scale,
   };
 }
 
@@ -543,18 +728,24 @@ function drawPixelFish(
   scale: number,
   frame: number,
   shadowy = false,
+  orientation: "horizontal" | "vertical-up" = "horizontal",
 ) {
   const wag = frame % 2;
-  const bodyColor = shadowy ? mixHex(accent, "#15485c", 0.72) : accent;
-  const finColor = shadowy ? mixHex(accent, "#0d2f3f", 0.78) : accent;
-  const eyeColor = shadowy ? "rgba(203, 244, 255, 0.18)" : "#10243a";
-  const tailColor = shadowy ? mixHex(accent, "#103949", 0.84) : "#d3f7ff";
-  const highlight = shadowy ? "rgba(201, 243, 255, 0.08)" : "rgba(255,255,255,0.25)";
+  const bodyColor = shadowy ? mixHex(accent, "#173f52", 0.54) : accent;
+  const finColor = shadowy ? mixHex(accent, "#102e3c", 0.62) : accent;
+  const eyeColor = shadowy ? "rgba(203, 244, 255, 0.16)" : "#10243a";
+  const tailColor = shadowy ? mixHex(accent, "#123646", 0.7) : "#d3f7ff";
+  const highlight = shadowy ? "rgba(201, 243, 255, 0.06)" : "rgba(255,255,255,0.25)";
   const shadow = shadowy ? "rgba(9, 29, 39, 0.18)" : "rgba(9, 29, 39, 0)";
 
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
-  ctx.scale(direction * scale, scale);
+  if (orientation === "vertical-up") {
+    ctx.rotate(Math.PI / 2);
+    ctx.scale(scale, scale);
+  } else {
+    ctx.scale(direction * scale, scale);
+  }
   drawPixelRect(ctx, -11, 7, 14, 2, shadow);
   drawPixelRect(ctx, -11, -3, 14, 6, bodyColor);
   drawPixelRect(ctx, -7, -6, 8, 3, finColor);
@@ -588,38 +779,49 @@ function drawPixelFisher(
   x: number,
   y: number,
   mode: GameMode,
-  frame: number,
+  motion: number,
   scale = 1,
 ) {
-  const pose = getFisherPose(mode, frame);
-  const coatColor = "#c65c43";
-  const coatShadow = "#8f4332";
+  const pose = getFisherPose(mode, motion);
+  const coatColor = "#c7664e";
+  const coatShadow = "#954735";
+  const coatLight = "#da8a63";
   const hatColor = "#efc94e";
+  const hatShadow = "#c59e2d";
+  const skin = "#f1cfaa";
+  const skinShadow = "#d6ab81";
+  const legColor = "#29445e";
+  const bootColor = "#5e432f";
+  const eyeColor = "#5b402c";
   ctx.save();
-  ctx.translate(Math.round(x), Math.round(y));
+  ctx.translate(Math.round(x + pose.swayX * scale), Math.round(y + pose.bob * scale));
   ctx.scale(scale, scale);
-  drawPixelRect(ctx, -13, 20 + pose.bob, 26, 5, "rgba(22,50,74,0.22)");
-  drawPixelRect(ctx, -6, 7 + pose.bob, 4, 11, "#2b4158");
-  drawPixelRect(ctx, 2, 7 + pose.bob, 4, 11, "#2b4158");
-  drawPixelRect(ctx, -9, -1 + pose.bob, 18, 13, coatColor);
-  drawPixelRect(ctx, 3, -1 + pose.bob, 4, 13, coatShadow);
-  drawPixelRect(ctx, -7, -12 + pose.bob, 14, 10, "#f3d2ac");
-  drawPixelRect(ctx, -10, -16 + pose.bob, 20, 4, hatColor);
-  drawPixelRect(ctx, -5, -21 + pose.bob, 11, 5, hatColor);
-  drawPixelRect(ctx, -10, 16 + pose.bob, 6, 4, "#5a3d2b");
-  drawPixelRect(ctx, 4, 16 + pose.bob, 6, 4, "#5a3d2b");
-  drawPixelRect(ctx, -2, 3 + pose.bob, 4, 2, "#f0b88e");
-  drawPixelRect(ctx, 5, 3 + pose.bob, 2, 2, "#f0b88e");
-  drawPixelRect(ctx, -4, -8 + pose.bob, 2, 2, "#805433");
-  drawPixelRect(ctx, 1, -8 + pose.bob, 2, 2, "#805433");
-  drawPixelRect(ctx, -2, -4 + pose.bob, 4, 1, "#d68b6e");
-  drawPixelRect(ctx, -2, 1 + pose.bob, 4, 1, "#f6e2be");
+  drawPixelRect(ctx, -13, 20, 28, 5, "rgba(22,50,74,0.22)");
+  drawPixelRect(ctx, -7 + pose.backStep, 9 - pose.backLegLift, 4, 11 + pose.backLegLift, legColor);
+  drawPixelRect(ctx, 1 + pose.frontStep, 9 - pose.frontLegLift, 5, 11 + pose.frontLegLift, legColor);
+  drawPixelRect(ctx, -8 + pose.backStep, 18, 6, 4, bootColor);
+  drawPixelRect(ctx, 1 + pose.frontStep, 18, 7, 4, bootColor);
+  drawPixelRect(ctx, -10, -1, 19, 13, coatColor);
+  drawPixelRect(ctx, 1, -1, 8, 13, coatShadow);
+  drawPixelRect(ctx, -7, 2, 8, 8, coatLight);
+  drawPixelRect(ctx, -4, 4, 7, 1, "#f7dfc3");
+  drawPixelRect(ctx, -4, 7, 7, 1, "#f7dfc3");
+  drawPixelRect(ctx, -5, -12, 13, 10, skin);
+  drawPixelRect(ctx, 3, -12, 5, 10, skinShadow);
+  drawPixelRect(ctx, 4, -8, 2, 2, skinShadow);
+  drawPixelRect(ctx, 1, -9, 2, 2, eyeColor);
+  drawPixelRect(ctx, -9, -17, 19, 4, hatColor);
+  drawPixelRect(ctx, -3, -22, 12, 5, hatColor);
+  drawPixelRect(ctx, 4, -22, 5, 5, hatShadow);
+  drawPixelRect(ctx, -8, -13, 17, 2, hatShadow);
+  drawPixelRect(ctx, 4, 1, 3, 6, skin);
+  drawPixelRect(ctx, 5, 5, 2, 3, skinShadow);
   ctx.strokeStyle = "#244a67";
   ctx.lineWidth = 2.4;
   ctx.beginPath();
-  ctx.moveTo(Math.round(6), Math.round(2 - pose.armLift + pose.bob));
-  ctx.lineTo(Math.round(16), Math.round(-7 - pose.armLift + pose.bob));
-  ctx.lineTo(Math.round(30), Math.round(-26 - pose.rodLift + pose.bob));
+  ctx.moveTo(Math.round(7), Math.round(2 - pose.armLift * 0.35));
+  ctx.lineTo(Math.round(16 + pose.torsoLean), Math.round(-8 - pose.armLift * 0.5));
+  ctx.lineTo(Math.round(30), Math.round(-28 - pose.rodLift));
   ctx.stroke();
   ctx.restore();
 }
@@ -627,6 +829,123 @@ function drawPixelFisher(
 function clearTimers(timerRef: MutableRefObject<number[]>) {
   timerRef.current.forEach((timer) => window.clearTimeout(timer));
   timerRef.current = [];
+}
+
+const AMBIENT_LOGIC_TICK_MS = 180;
+const AMBIENT_SWIM_MIN_MS = 2200;
+const AMBIENT_SWIM_MAX_MS = 4600;
+const AMBIENT_RESPAWN_MIN_MS = 1800;
+const AMBIENT_RESPAWN_MAX_MS = 4200;
+const AMBIENT_LIFETIME_MIN_MS = 18000;
+const AMBIENT_LIFETIME_MAX_MS = 34000;
+const WALK_SEGMENT_MS = 190;
+const INITIAL_AMBIENT_BLUEPRINTS = [
+  { from: { row: 7, col: 5 }, to: { row: 7, col: 4 }, phase: 0.1, duration: 1200 },
+  { from: { row: 8, col: 5 }, to: { row: 7, col: 4 }, phase: 0.7, duration: 2900 },
+  { from: { row: 4, col: 7 }, to: { row: 4, col: 8 }, phase: 1.2, duration: 2600 },
+  { from: { row: 3, col: 11 }, to: { row: 3, col: 12 }, phase: 1.8, duration: 3400 },
+  { from: { row: 6, col: 13 }, to: { row: 6, col: 12 }, phase: 2.4, duration: 3000 },
+  { from: { row: 8, col: 13 }, to: { row: 8, col: 14 }, phase: 2.9, duration: 4200 },
+  { from: { row: 10, col: 10 }, to: { row: 10, col: 11 }, phase: 3.6, duration: 3600 },
+] as const;
+
+function randomBetween(random: () => number, min: number, max: number) {
+  return min + random() * (max - min);
+}
+
+function getAmbientFishBaseSize(fish: FishTemplate) {
+  if (fish.rarity === "oddball") {
+    return 1.28;
+  }
+
+  if (fish.rarity === "rare") {
+    return 1.2;
+  }
+
+  if (fish.rarity === "uncommon") {
+    return 1.12;
+  }
+
+  return 1.04;
+}
+
+function buildWaterNeighborMap(waterTiles: Tile[]) {
+  const waterSet = new Set(waterTiles.map(getTileKey));
+  const neighbors = new Map<string, Tile[]>();
+
+  for (const tile of waterTiles) {
+    const adjacent: Tile[] = [];
+
+    for (let rowStep = -1; rowStep <= 1; rowStep += 1) {
+      for (let colStep = -1; colStep <= 1; colStep += 1) {
+        if (rowStep === 0 && colStep === 0) {
+          continue;
+        }
+
+        const nextTile = {
+          row: tile.row + rowStep,
+          col: tile.col + colStep,
+        };
+
+        if (waterSet.has(getTileKey(nextTile))) {
+          adjacent.push(nextTile);
+        }
+      }
+    }
+
+    neighbors.set(getTileKey(tile), adjacent);
+  }
+
+  return neighbors;
+}
+
+function chooseNextSwimTile(
+  current: Tile,
+  previous: Tile | undefined,
+  neighborMap: Map<string, Tile[]>,
+  random: () => number,
+  baitTile?: Tile,
+) {
+  const candidates = neighborMap.get(getTileKey(current)) ?? [];
+
+  if (candidates.length === 0) {
+    return current;
+  }
+
+  const weighted = candidates.map((candidate) => {
+    let weight = 1;
+
+    if (previous && tileMatches(candidate, previous)) {
+      weight *= baitTile ? 0.55 : 0.25;
+    }
+
+    if (baitTile) {
+      const distance = getTileRangeDistance(candidate, baitTile);
+      weight += Math.max(0, CAST_RANGE_TILES + 2 - distance) * 0.9;
+
+      if (tileMatches(candidate, baitTile)) {
+        weight += 9;
+      }
+    }
+
+    return {
+      tile: candidate,
+      weight,
+    };
+  });
+
+  const total = weighted.reduce((sum, candidate) => sum + candidate.weight, 0);
+  let threshold = random() * total;
+
+  for (const candidate of weighted) {
+    threshold -= candidate.weight;
+
+    if (threshold <= 0) {
+      return candidate.tile;
+    }
+  }
+
+  return weighted.at(-1)?.tile ?? current;
 }
 
 export default function FishingGameShell({
@@ -637,8 +956,18 @@ export default function FishingGameShell({
   const sceneRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number[]>([]);
   const creelRef = useRef<CatchInstance[]>([]);
+  const ambientFishRef = useRef<AmbientFish[]>([]);
+  const ambientRandomRef = useRef(createSeededRandom(`${manifest.pond.id}:ambient-school`));
+  const movementRef = useRef<MovementPath>();
   const selectedWaterRef = useRef<Tile>();
+  const castNumberRef = useRef(0);
+  const gameStateRef = useRef<GameMode>("idle");
+  const playerTileRef = useRef<ShoreTile>();
   const reelingStartedAtRef = useRef<number>();
+  const approachStartedAtRef = useRef<number>();
+  const approachDirectionRef = useRef<1 | -1>(1);
+  const inspectionStartedAtRef = useRef<number>();
+  const encounterRef = useRef<EncounterContext>();
   const waterTiles = useMemo(() => getPlayableTiles(manifest.pond.mask), [manifest.pond.mask]);
   const defaultPlayerTile = useMemo<ShoreTile>(
     () =>
@@ -654,70 +983,23 @@ export default function FishingGameShell({
     [defaultPlayerTile, manifest.pond.shoreline],
   );
   const backdropTiles = useMemo(() => buildBackdropTiles(), []);
+  const waterNeighborMap = useMemo(() => buildWaterNeighborMap(waterTiles), [waterTiles]);
+  const shoreNeighborMap = useMemo(
+    () => buildShoreNeighborMap(manifest.pond.shoreline),
+    [manifest.pond.shoreline],
+  );
   const nearShoreWaterKeys = useMemo(
     () => buildNearShoreWaterKeys(waterTiles, manifest.pond.shoreline),
     [manifest.pond.shoreline, waterTiles],
   );
-  const ambientFish = useMemo<AmbientFish[]>(
-    () => [
-      {
-        tile: { row: 2, col: 1 },
-        accent: "#f59e0b",
-        delay: 0,
-        duration: 9800,
-        direction: 1,
-        size: 1.3,
-      },
-      {
-        tile: { row: 5, col: 3 },
-        accent: "#fb7185",
-        delay: 700,
-        duration: 11400,
-        direction: -1,
-        size: 1.15,
-      },
-      {
-        tile: { row: 8, col: 2 },
-        accent: "#60a5fa",
-        delay: 1400,
-        duration: 12600,
-        direction: 1,
-        size: 1.35,
-      },
-      {
-        tile: { row: 10, col: 4 },
-        accent: "#34d399",
-        delay: 2400,
-        duration: 10200,
-        direction: -1,
-        size: 1.05,
-      },
-      {
-        tile: { row: 4, col: 6 },
-        accent: "#facc15",
-        delay: 3300,
-        duration: 13200,
-        direction: -1,
-        size: 1.2,
-      },
-      {
-        tile: { row: 9, col: 5 },
-        accent: "#c084fc",
-        delay: 4100,
-        duration: 14100,
-        direction: 1,
-        size: 1.05,
-      },
-      {
-        tile: { row: 6, col: 1 },
-        accent: "#2dd4bf",
-        delay: 5200,
-        duration: 11800,
-        direction: 1,
-        size: 1.12,
-      },
-    ],
-    [],
+  const ambientFishTemplates = useMemo(
+    () =>
+      manifest.fish.map((fish) => ({
+        fishId: fish.id,
+        accent: fish.accent,
+        size: getAmbientFishBaseSize(fish),
+      })),
+    [manifest.fish],
   );
 
   const [playerTile, setPlayerTile] = useState<ShoreTile>(defaultPlayerTile);
@@ -725,6 +1007,7 @@ export default function FishingGameShell({
   const [hoveredWaterTile, setHoveredWaterTile] = useState<Tile>();
   const [gameState, setGameState] = useState<GameMode>("idle");
   const [creel, setCreel] = useState<CatchInstance[]>([]);
+  const [score, setScore] = useState(0);
   const [castNumber, setCastNumber] = useState(0);
   const [lastCatch, setLastCatch] = useState<CatchInstance>();
   const [activeCatchPreview, setActiveCatchPreview] = useState<CatchInstance>();
@@ -735,7 +1018,6 @@ export default function FishingGameShell({
   );
 
   const isCreelFull = creel.length >= MAX_CREEL_SIZE;
-  const score = creel.reduce((sum, item) => sum + item.points, 0);
   const sceneWidth = sceneSize.width > 0 ? sceneSize.width : manifest.pond.viewBox.width;
   const sceneHeight = sceneSize.height > 0 ? sceneSize.height : manifest.pond.viewBox.height;
   const camera = useMemo(() => {
@@ -789,7 +1071,10 @@ export default function FishingGameShell({
       ? activeWaterTile
       : undefined;
   const sceneWaterTile =
-    gameState === "waiting" || gameState === "hooked" || gameState === "reeling"
+    gameState === "waiting" ||
+    gameState === "hooked" ||
+    gameState === "reeling" ||
+    gameState === "inspecting"
       ? selectedWaterTile
       : activeWaterInRange;
   const playerCenter = projectSceneTile(playerTile);
@@ -806,6 +1091,57 @@ export default function FishingGameShell({
   const shoreRockCenter = projectSceneTile({ row: 4, col: 12 });
   const statusHeading = getStatusHeading(gameState, sceneWaterTile, isCreelFull);
 
+  function createAmbientFishState(
+    id: string,
+    fishId: string,
+    fromTile: Tile,
+    toTile: Tile,
+    accent: string,
+    size: number,
+    phase: number,
+    now: number,
+    segmentDuration?: number,
+  ): AmbientFish {
+    return {
+      id,
+      fishId,
+      accent,
+      fromTile,
+      toTile,
+      previousTile: undefined,
+      segmentStartedAt: now,
+      segmentDuration:
+        segmentDuration ??
+        randomBetween(ambientRandomRef.current, AMBIENT_SWIM_MIN_MS, AMBIENT_SWIM_MAX_MS),
+      direction: toTile.col >= fromTile.col ? 1 : -1,
+      size,
+      phase,
+      active: true,
+      expiresAt:
+        now + randomBetween(ambientRandomRef.current, AMBIENT_LIFETIME_MIN_MS, AMBIENT_LIFETIME_MAX_MS),
+    };
+  }
+
+  function createRespawnedAmbientFish(id: string, now: number) {
+    const random = ambientRandomRef.current;
+    const fromTile = waterTiles[Math.floor(random() * waterTiles.length)] ?? waterTiles[0];
+    const toTile = chooseNextSwimTile(fromTile, undefined, waterNeighborMap, random);
+    const template =
+      ambientFishTemplates[Math.floor(random() * ambientFishTemplates.length)] ??
+      ambientFishTemplates[0];
+
+    return createAmbientFishState(
+      id,
+      template?.fishId ?? manifest.fish[0]?.id ?? "lantern-koi",
+      fromTile,
+      toTile,
+      template?.accent ?? "#345d7d",
+      template?.size ?? randomBetween(random, 1.02, 1.32),
+      randomBetween(random, 0, Math.PI * 2),
+      now,
+    );
+  }
+
   useEffect(() => {
     creelRef.current = creel;
   }, [creel]);
@@ -813,6 +1149,18 @@ export default function FishingGameShell({
   useEffect(() => {
     selectedWaterRef.current = selectedWaterTile;
   }, [selectedWaterTile]);
+
+  useEffect(() => {
+    castNumberRef.current = castNumber;
+  }, [castNumber]);
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => {
+    playerTileRef.current = playerTile;
+  }, [playerTile]);
 
   useEffect(() => {
     const updateLayout = () => {
@@ -850,27 +1198,111 @@ export default function FishingGameShell({
   }, []);
 
   useEffect(() => {
-    if (isCreelFull && gameState === "idle") {
-      setGameState("inventory-full");
-      setStatusMessage("The catch rail is full. Throw one back before casting again.");
-    }
+    const now = performance.now();
+    const seededFish = INITIAL_AMBIENT_BLUEPRINTS.filter((fish) => {
+      return (
+        canCast(fish.from, manifest.pond.mask) &&
+        canCast(fish.to, manifest.pond.mask)
+      );
+    }).map((fish, index) => {
+      const template =
+        ambientFishTemplates[index % Math.max(1, ambientFishTemplates.length)] ??
+        ambientFishTemplates[0];
 
-    if (!isCreelFull && gameState === "inventory-full") {
-      if (selectedWaterRef.current && canCast(selectedWaterRef.current, manifest.pond.mask)) {
-        const nextCastNumber = castNumber + 1;
+      return createAmbientFishState(
+        `ambient-${index + 1}`,
+        template?.fishId ?? manifest.fish[0]?.id ?? "lantern-koi",
+        fish.from,
+        fish.to,
+        template?.accent ?? "#345d7d",
+        template?.size ?? 1.08,
+        fish.phase,
+        now + index * 16,
+        fish.duration,
+      );
+    });
 
-        setCastNumber(nextCastNumber);
-        setGameState("waiting");
-        setActiveCatchPreview(buildCatchResult(selectedWaterRef.current, nextCastNumber));
-        setStatusMessage("A slot opened in the catch rail. The fisher casts right back out.");
-        scheduleCatchSequence(selectedWaterRef.current, nextCastNumber);
-        return;
-      }
+    ambientFishRef.current =
+      seededFish.length > 0
+        ? seededFish
+        : waterTiles.slice(0, 6).map((tile, index) => createRespawnedAmbientFish(`ambient-${index + 1}`, now));
+  }, [ambientFishTemplates, manifest.fish, manifest.pond.mask, waterTiles, waterNeighborMap]);
 
-      setGameState("idle");
-      setStatusMessage("A slot opened in the catch rail. Pick a tile and cast again.");
-    }
-  }, [castNumber, gameState, isCreelFull, manifest.pond.mask]);
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const now = performance.now();
+      const random = ambientRandomRef.current;
+      const baitTile =
+        gameStateRef.current === "waiting" && !approachStartedAtRef.current
+          ? selectedWaterRef.current
+          : undefined;
+
+      ambientFishRef.current = ambientFishRef.current.map((fish) => {
+        if (!fish.active) {
+          if (fish.respawnAt && now >= fish.respawnAt) {
+            return createRespawnedAmbientFish(fish.id, now);
+          }
+
+          return fish;
+        }
+
+        if (now >= fish.expiresAt) {
+          return {
+            ...fish,
+            active: false,
+            respawnAt: now + randomBetween(random, AMBIENT_RESPAWN_MIN_MS, AMBIENT_RESPAWN_MAX_MS),
+          };
+        }
+
+        if (now - fish.segmentStartedAt < fish.segmentDuration) {
+          return fish;
+        }
+
+        const arrivedTile = fish.toTile;
+
+        if (baitTile && tileMatches(arrivedTile, baitTile) && !encounterRef.current) {
+          const castContext = {
+            target: baitTile,
+            castNumber: castNumberRef.current,
+            fishId: fish.fishId,
+            fishScale: fish.size,
+            direction: fish.direction,
+          };
+
+          encounterRef.current = castContext;
+          approachStartedAtRef.current = now;
+          approachDirectionRef.current = fish.direction;
+          startEncounterSequence(castContext);
+
+          return {
+            ...fish,
+            active: false,
+            respawnAt: now + randomBetween(random, AMBIENT_RESPAWN_MIN_MS, AMBIENT_RESPAWN_MAX_MS),
+          };
+        }
+
+        const nextTile = chooseNextSwimTile(
+          arrivedTile,
+          fish.fromTile,
+          waterNeighborMap,
+          random,
+          baitTile,
+        );
+
+        return {
+          ...fish,
+          fromTile: arrivedTile,
+          toTile: nextTile,
+          previousTile: fish.fromTile,
+          segmentStartedAt: now,
+          segmentDuration: randomBetween(random, AMBIENT_SWIM_MIN_MS, AMBIENT_SWIM_MAX_MS),
+          direction: nextTile.col >= arrivedTile.col ? 1 : -1,
+        };
+      });
+    }, AMBIENT_LOGIC_TICK_MS);
+
+    return () => window.clearInterval(interval);
+  }, [waterNeighborMap]);
 
   useEffect(() => {
     return () => clearTimers(timerRef);
@@ -895,6 +1327,7 @@ export default function FishingGameShell({
 
     const draw = (time: number) => {
       const frame = Math.floor(time / 180);
+      const motion = time / 150;
       const detailScale = camera.tileSize.width / manifest.pond.tile.width;
       const fisherScale = Math.max(1.6, Math.min(2.35, detailScale * 0.43));
       const treeScale = Math.max(1.7, Math.min(2.75, detailScale * 0.5));
@@ -902,8 +1335,34 @@ export default function FishingGameShell({
       const bushScale = Math.max(1.08, Math.min(1.44, detailScale * 0.24));
       const reedsScale = Math.max(1.72, Math.min(2.45, detailScale * 0.4));
       const rockScale = Math.max(1.15, Math.min(1.65, detailScale * 0.28));
-      const fisherY = playerCenter.y - 8;
-      const rodTip = getRodTipPosition(playerCenter.x, fisherY, gameState, frame, fisherScale);
+      const movement = movementRef.current;
+      let visualPlayerCenter = playerCenter;
+      let fisherMode = gameState;
+
+      if (movement && movement.tiles.length > 1) {
+        const elapsed = Math.max(0, time - movement.startedAt);
+        const totalSegments = movement.tiles.length - 1;
+        const pathProgress = Math.min(totalSegments, elapsed / movement.segmentDuration);
+        const segmentIndex = Math.min(totalSegments - 1, Math.floor(pathProgress));
+        const localProgress = easeInOut(Math.min(1, Math.max(0, pathProgress - segmentIndex)));
+        const fromCenter = projectSceneTile(movement.tiles[segmentIndex]);
+        const toCenter = projectSceneTile(movement.tiles[segmentIndex + 1] ?? movement.tiles[segmentIndex]);
+
+        visualPlayerCenter = {
+          x: lerp(fromCenter.x, toCenter.x, localProgress),
+          y: lerp(fromCenter.y, toCenter.y, localProgress),
+        };
+        fisherMode = "walking";
+      }
+
+      const fisherY = visualPlayerCenter.y - 8;
+      const rodTip = getRodTipPosition(
+        visualPlayerCenter.x,
+        fisherY,
+        fisherMode,
+        motion,
+        fisherScale,
+      );
       ctx.clearRect(0, 0, camera.viewportWidth, camera.viewportHeight);
       ctx.imageSmoothingEnabled = false;
 
@@ -1047,10 +1506,23 @@ export default function FishingGameShell({
       drawPixelCattails(ctx, cattailCenterB.x - 6, cattailCenterB.y + 11, frame + 1, reedsScale * 0.94);
       drawPixelCattails(ctx, cattailCenterC.x - 4, cattailCenterC.y + 12, frame + 2, reedsScale);
 
-      for (const fish of ambientFish) {
-        const center = projectSceneTile(fish.tile);
-        const wave = Math.sin((time + fish.delay) / fish.duration) * 16;
-        const wiggle = Math.cos((time + fish.delay) / (fish.duration / 2)) * 6;
+      for (const fish of ambientFishRef.current) {
+        if (!fish.active) {
+          continue;
+        }
+
+        const fromCenter = projectSceneTile(fish.fromTile);
+        const toCenter = projectSceneTile(fish.toTile);
+        const swimProgress = Math.min(
+          1,
+          Math.max(0, (time - fish.segmentStartedAt) / Math.max(1, fish.segmentDuration)),
+        );
+        const center = {
+          x: lerp(fromCenter.x, toCenter.x, swimProgress),
+          y: lerp(fromCenter.y, toCenter.y, swimProgress),
+        };
+        const wave = Math.sin(time / 760 + fish.phase) * 6;
+        const wiggle = Math.cos(time / 920 + fish.phase * 1.3) * 3;
         drawPixelFish(
           ctx,
           center.x + wave,
@@ -1065,8 +1537,14 @@ export default function FishingGameShell({
 
       if (sceneWaterTile) {
         const targetCenter = projectSceneTile(sceneWaterTile);
+        const inspectPoint = {
+          x: rodTip.x - 3,
+          y: rodTip.y + 19,
+        };
         const currentLineEnd =
-          gameState === "reeling" && reelingStartedAtRef.current
+          gameState === "inspecting"
+            ? inspectPoint
+            : gameState === "reeling" && reelingStartedAtRef.current
             ? {
                 x: lerp(
                   targetCenter.x,
@@ -1086,7 +1564,9 @@ export default function FishingGameShell({
             : { x: targetCenter.x, y: targetCenter.y - 4 };
 
         ctx.strokeStyle =
-          gameState === "hooked" || gameState === "reeling" ? "#17354d" : "#335c72";
+          gameState === "hooked" || gameState === "reeling" || gameState === "inspecting"
+            ? "#17354d"
+            : "#335c72";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(Math.round(rodTip.x), Math.round(rodTip.y));
@@ -1104,34 +1584,76 @@ export default function FishingGameShell({
         }
         ctx.stroke();
 
-        if (activeCatchPreview && (gameState === "hooked" || gameState === "reeling")) {
-          const hookedFishCenter =
-            gameState === "hooked"
-              ? {
-                  x: currentLineEnd.x + Math.sin(time / 120) * 5,
-                  y: currentLineEnd.y + 10 + Math.cos(time / 100) * 3,
-                }
-              : {
-                  x: currentLineEnd.x - 7,
-                  y: currentLineEnd.y + 8,
-                };
-          drawPixelFish(
-            ctx,
-            hookedFishCenter.x,
-            hookedFishCenter.y,
-            activeCatchPreview.accent,
-            rodTip.x > hookedFishCenter.x ? 1 : -1,
-            fishScaleBoost * 1.05,
-            frame,
-          );
+        if (activeCatchPreview) {
+          let hookedFishCenter: { x: number; y: number } | undefined;
+          let fishShadowy = false;
+          let orientation: "horizontal" | "vertical-up" = "horizontal";
+          let hookDirection: 1 | -1 = rodTip.x < currentLineEnd.x ? 1 : -1;
+          const encounterFishScale =
+            (encounterRef.current?.fishScale ?? ambientFishTemplates[0]?.size ?? 1.1) * fishScaleBoost;
+          let hookedFishScale = encounterFishScale;
+
+          if (gameState === "waiting" && approachStartedAtRef.current) {
+            const approachProgress = Math.min(
+              1,
+              Math.max(0, (time - approachStartedAtRef.current) / BITE_DELAY_MS),
+            );
+            const approachStart = {
+              x: targetCenter.x + approachDirectionRef.current * 18,
+              y: targetCenter.y + 12,
+            };
+            hookedFishCenter = {
+              x: lerp(approachStart.x, currentLineEnd.x - approachDirectionRef.current * 3, easeInOut(approachProgress)),
+              y: lerp(approachStart.y, currentLineEnd.y + 9, easeInOut(approachProgress)),
+            };
+            fishShadowy = true;
+            hookDirection = approachDirectionRef.current;
+            hookedFishScale = encounterFishScale;
+          } else if (gameState === "hooked") {
+            hookedFishCenter = {
+              x: currentLineEnd.x + Math.sin(time / 120) * 5,
+              y: currentLineEnd.y + 10 + Math.cos(time / 100) * 3,
+            };
+            hookedFishScale = encounterFishScale;
+          } else if (gameState === "reeling") {
+            hookDirection = rodTip.x < currentLineEnd.x ? 1 : -1;
+            hookedFishScale = encounterFishScale * 1.12;
+            const horizontalNoseOffset = hookedFishScale * 8.5;
+            hookedFishCenter = {
+              x: currentLineEnd.x + horizontalNoseOffset * hookDirection,
+              y: currentLineEnd.y + 8,
+            };
+          } else if (gameState === "inspecting") {
+            hookedFishScale = encounterFishScale * 1.22;
+            const verticalNoseOffset = hookedFishScale * 8.5;
+            hookedFishCenter = {
+              x: inspectPoint.x,
+              y: inspectPoint.y + verticalNoseOffset,
+            };
+            orientation = "vertical-up";
+          }
+
+          if (hookedFishCenter) {
+            drawPixelFish(
+              ctx,
+              hookedFishCenter.x,
+              hookedFishCenter.y,
+              activeCatchPreview.accent,
+              hookDirection,
+              hookedFishScale,
+              frame,
+              fishShadowy,
+              orientation,
+            );
+          }
         }
 
-        if (gameState === "waiting" || gameState === "hooked" || gameState === "reeling") {
+        if (gameState === "waiting" || gameState === "hooked") {
           drawPixelBobber(ctx, currentLineEnd.x, currentLineEnd.y + 2, gameState, frame);
         }
       }
 
-      drawPixelFisher(ctx, playerCenter.x, fisherY, gameState, frame, fisherScale);
+      drawPixelFisher(ctx, visualPlayerCenter.x, fisherY, fisherMode, motion, fisherScale);
 
       rafId = window.requestAnimationFrame(draw);
     };
@@ -1140,7 +1662,6 @@ export default function FishingGameShell({
 
     return () => window.cancelAnimationFrame(rafId);
   }, [
-    ambientFish,
     backdropTiles,
     camera,
     gameState,
@@ -1166,33 +1687,135 @@ export default function FishingGameShell({
     waterTiles,
   ]);
 
-  function buildCatchResult(target: Tile, activeCastNumber: number) {
+  function buildCatchResult(target: Tile, activeCastNumber: number, fishId?: string) {
     const random = createSeededRandom(
-      `${manifest.pond.id}:${activeCastNumber}:${target.row}:${target.col}`,
+      `${manifest.pond.id}:${activeCastNumber}:${target.row}:${target.col}:${fishId ?? "spawn"}`,
     );
 
-    return resolveCatch(manifest, target, random, activeCastNumber);
+    return resolveCatch(manifest, target, random, activeCastNumber, fishId);
+  }
+
+  function startWaitingAtTile(target: Tile, activeCastNumber: number, message: string) {
+    clearTimers(timerRef);
+    castNumberRef.current = activeCastNumber;
+    gameStateRef.current = "waiting";
+    selectedWaterRef.current = target;
+    encounterRef.current = undefined;
+    approachStartedAtRef.current = undefined;
+    reelingStartedAtRef.current = undefined;
+    inspectionStartedAtRef.current = undefined;
+    setSelectedWaterTile(target);
+    setHoveredWaterTile(target);
+    setCastNumber(activeCastNumber);
+    setGameState("waiting");
+    setActiveCatchPreview(undefined);
+    setStatusMessage(message);
+  }
+
+  function startEncounterSequence(encounter: EncounterContext) {
+    if (
+      !tileMatches(selectedWaterRef.current, encounter.target) ||
+      gameStateRef.current !== "waiting"
+    ) {
+      encounterRef.current = undefined;
+      return;
+    }
+
+    const catchResult = buildCatchResult(encounter.target, encounter.castNumber, encounter.fishId);
+    setActiveCatchPreview(catchResult);
+    setStatusMessage("A shadow drifts over the bait and noses in toward the bobber.");
+
+    timerRef.current.push(
+      window.setTimeout(() => {
+        approachStartedAtRef.current = undefined;
+        gameStateRef.current = "hooked";
+        setGameState("hooked");
+        setStatusMessage("Fish on the line. The fisher braces against the pull.");
+      }, BITE_DELAY_MS),
+    );
+
+    timerRef.current.push(
+      window.setTimeout(() => {
+        reelingStartedAtRef.current = performance.now();
+        gameStateRef.current = "reeling";
+        setGameState("reeling");
+        setStatusMessage("Reeling the fish in slowly.");
+      }, BITE_DELAY_MS + AUTO_CATCH_MS),
+    );
+
+    timerRef.current.push(
+      window.setTimeout(() => {
+        inspectionStartedAtRef.current = performance.now();
+        gameStateRef.current = "inspecting";
+        setGameState("inspecting");
+        setStatusMessage("The fisher lifts the catch to inspect it for a second.");
+      }, BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS),
+    );
+
+    timerRef.current.push(
+      window.setTimeout(() => {
+        finalizeCatch(encounter.target, encounter.castNumber, catchResult);
+      }, BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS + INSPECTION_MS),
+    );
   }
 
   function handleMoveToLand(tile: ShoreTile) {
-
     if (tileIsReserved(tile, "land")) {
       return;
     }
 
+    if (movementRef.current) {
+      setStatusMessage("Let the fisher finish walking to the next bank tile first.");
+      return;
+    }
+
+    const currentTile = playerTileRef.current ?? playerTile;
+
+    if (tileMatches(currentTile, tile)) {
+      return;
+    }
+
+    const path = findShorePath(currentTile, tile, shoreNeighborMap);
+
     clearTimers(timerRef);
+    encounterRef.current = undefined;
+    approachStartedAtRef.current = undefined;
     reelingStartedAtRef.current = undefined;
+    inspectionStartedAtRef.current = undefined;
+    gameStateRef.current = "walking";
+    selectedWaterRef.current = undefined;
+    playerTileRef.current = tile;
+    movementRef.current = {
+      tiles: path,
+      startedAt: performance.now(),
+      segmentDuration: WALK_SEGMENT_MS,
+    };
     setPlayerTile(tile);
     setSelectedWaterTile(undefined);
     setHoveredWaterTile(undefined);
     setActiveCatchPreview(undefined);
-    setGameState("idle");
+    setGameState("walking");
+    timerRef.current.push(
+      window.setTimeout(() => {
+        movementRef.current = undefined;
+        gameStateRef.current = "idle";
+        setGameState("idle");
+        setStatusMessage(
+          `Moved to bank tile ${tile.row}:${tile.col}. Click nearby water to cast within ${CAST_RANGE_TILES} squares.`,
+        );
+      }, Math.max(120, (path.length - 1) * WALK_SEGMENT_MS)),
+    );
     setStatusMessage(
-      `Moved to bank tile ${tile.row}:${tile.col}. Click nearby water to cast within ${CAST_RANGE_TILES} squares.`,
+      `Walking to bank tile ${tile.row}:${tile.col}. The fisher stays on the shoreline as he changes spots.`,
     );
   }
 
   function handleChooseWater(tile: Tile) {
+    if (gameState === "walking") {
+      setStatusMessage("Let the fisher finish walking before you cast again.");
+      return;
+    }
+
     if (gameState !== "idle" && gameState !== "inventory-full") {
       return;
     }
@@ -1209,87 +1832,59 @@ export default function FishingGameShell({
       return;
     }
 
-    if (isCreelFull) {
-      setGameState("inventory-full");
-      setStatusMessage("The catch rail is full. Throw one back before casting again.");
-      return;
-    }
-
     const nextCastNumber = castNumber + 1;
 
-    setSelectedWaterTile(tile);
-    setHoveredWaterTile(tile);
-    setCastNumber(nextCastNumber);
-    setGameState("waiting");
-    setActiveCatchPreview(buildCatchResult(tile, nextCastNumber));
-    reelingStartedAtRef.current = undefined;
-    setStatusMessage(
-      `Cast to water tile ${tile.row}:${tile.col}. The line settles while the fisher waits.`,
+    startWaitingAtTile(
+      tile,
+      nextCastNumber,
+      isCreelFull
+        ? `Cast to water tile ${tile.row}:${tile.col}. The rail is full, so anything landed will be released after inspection.`
+        : `Cast to water tile ${tile.row}:${tile.col}. The line settles while the fisher waits for a passing shadow.`,
     );
-    scheduleCatchSequence(tile, nextCastNumber);
   }
 
-  function finalizeCatch(target: Tile, activeCastNumber: number) {
-    const catchResult = buildCatchResult(target, activeCastNumber);
+  function finalizeCatch(target: Tile, activeCastNumber: number, catchResult: CatchInstance) {
     const artifact = getArtifact(manifest, catchResult.artifactId);
-    const nextLength = Math.min(creelRef.current.length + 1, MAX_CREEL_SIZE);
+    const kept = creelRef.current.length < MAX_CREEL_SIZE;
 
-    setCreel((current) =>
-      current.length >= MAX_CREEL_SIZE ? current : [...current, catchResult],
-    );
+    if (kept) {
+      setCreel((current) => [...current, catchResult]);
+    }
+
+    setScore((current) => current + catchResult.points);
     setLastCatch(catchResult);
+    encounterRef.current = undefined;
+    approachStartedAtRef.current = undefined;
     reelingStartedAtRef.current = undefined;
+    inspectionStartedAtRef.current = undefined;
 
-    if (
-      nextLength < MAX_CREEL_SIZE &&
-      selectedWaterRef.current &&
-      tileMatches(selectedWaterRef.current, target)
-    ) {
+    if (selectedWaterRef.current && tileMatches(selectedWaterRef.current, target)) {
       const nextCastNumber = activeCastNumber + 1;
 
+      castNumberRef.current = nextCastNumber;
+      gameStateRef.current = "waiting";
       setCastNumber(nextCastNumber);
       setGameState("waiting");
-      setActiveCatchPreview(buildCatchResult(target, nextCastNumber));
+      setActiveCatchPreview(undefined);
       setStatusMessage(
-        artifact
-          ? `Caught ${catchResult.displayName}. Its artifact is in the rail, and the fisher casts right back out.`
-          : `Caught ${catchResult.displayName} for ${catchResult.points} points. The line drops back into the pond.`,
+        kept
+          ? artifact
+            ? `Caught ${catchResult.displayName}. Its artifact is in the rail, and the fisher casts right back out.`
+            : `Caught ${catchResult.displayName} for ${catchResult.points} points. The line drops back into the pond.`
+          : `Caught ${catchResult.displayName} for ${catchResult.points} points, but the rail was full, so it was released after inspection.`,
       );
-      scheduleCatchSequence(target, nextCastNumber);
       return;
     }
 
     setActiveCatchPreview(undefined);
-    setGameState(nextLength >= MAX_CREEL_SIZE ? "inventory-full" : "idle");
+    gameStateRef.current = "idle";
+    setGameState("idle");
     setStatusMessage(
-      artifact
-        ? `Caught ${catchResult.displayName}. Its artifact is waiting in the catch rail.`
-        : `Caught ${catchResult.displayName} for ${catchResult.points} points.`,
-    );
-  }
-
-  function scheduleCatchSequence(target: Tile, activeCastNumber: number) {
-    clearTimers(timerRef);
-
-    timerRef.current.push(
-      window.setTimeout(() => {
-        setGameState("hooked");
-        setStatusMessage("Fish on the line. The fisher braces against the pull.");
-      }, BITE_DELAY_MS),
-    );
-
-    timerRef.current.push(
-      window.setTimeout(() => {
-        reelingStartedAtRef.current = performance.now();
-        setGameState("reeling");
-        setStatusMessage("Reeling the fish toward shore.");
-      }, BITE_DELAY_MS + AUTO_CATCH_MS),
-    );
-
-    timerRef.current.push(
-      window.setTimeout(() => {
-        finalizeCatch(target, activeCastNumber);
-      }, BITE_DELAY_MS + AUTO_CATCH_MS + REEL_ANIMATION_MS),
+      kept
+        ? artifact
+          ? `Caught ${catchResult.displayName}. Its artifact is waiting in the catch rail.`
+          : `Caught ${catchResult.displayName} for ${catchResult.points} points.`
+        : `Caught ${catchResult.displayName} for ${catchResult.points} points, but released it because the rail was full.`,
     );
   }
 
@@ -1298,7 +1893,14 @@ export default function FishingGameShell({
     const nextCreel = creel.filter((item) => item.id !== catchId);
 
     setCreel(nextCreel);
-    setGameState("idle");
+    if (
+      gameStateRef.current !== "waiting" &&
+      gameStateRef.current !== "hooked" &&
+      gameStateRef.current !== "reeling" &&
+      gameStateRef.current !== "inspecting"
+    ) {
+      setGameState("idle");
+    }
     setStatusMessage(
       released
         ? `Threw back ${released.displayName}. There is room in the rail again.`
@@ -1419,10 +2021,14 @@ export default function FishingGameShell({
               {isHudCollapsed ? "Expand rail" : "Minimize rail"}
             </button>
             <span className="fishing-status-pill">
-              {gameState === "hooked"
+              {gameState === "walking"
+                ? "Walking"
+                : gameState === "hooked"
                 ? "Hooked"
                 : gameState === "reeling"
                   ? "Reeling"
+                  : gameState === "inspecting"
+                    ? "Inspecting"
                   : gameState === "waiting"
                     ? "Waiting"
                     : isCreelFull

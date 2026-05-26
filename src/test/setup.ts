@@ -20,6 +20,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       lineTo: noop,
       moveTo: noop,
       quadraticCurveTo: noop,
+      rotate: noop,
       restore: noop,
       save: noop,
       scale: noop,

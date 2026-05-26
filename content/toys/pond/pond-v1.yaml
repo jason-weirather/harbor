@@ -2,19 +2,24 @@ id: clubhouse-pond-v1
 name: Clubhouse Pond
 description: A game-first isometric shoreline board where the fisher roams the bank, casts into the cove, and pulls up artifact fish.
 mask:
-  - "00000000000000"
-  - "00000000000000"
-  - "11111110000000"
-  - "11111111000000"
-  - "11111111100000"
-  - "11111111110000"
-  - "11111111110000"
-  - "11111111110000"
-  - "11111111100000"
-  - "11111111000000"
-  - "11111110000000"
-  - "11111100000000"
-  - "11111000000000"
+  - "1111111000000000000"
+  - "1111111100000000000"
+  - "1111111100000000000"
+  - "1111111110000000000"
+  - "1111111111000000000"
+  - "1111111111000000000"
+  - "1111111111100000000"
+  - "1111111111100000000"
+  - "1111111111100000000"
+  - "1111111111100000000"
+  - "1111111111100000000"
+  - "1111111111000000000"
+  - "1111111110000000000"
+  - "1111111110000000000"
+  - "1111111100000000000"
+  - "1111111000000000000"
+  - "1111110000000000000"
+  - "1111100000000000000"
 tile:
   width: 40
   height: 20
@@ -22,28 +27,24 @@ viewBox:
   width: 480
   height: 270
 origin:
-  x: 222
-  y: 4
+  x: 250
+  y: -6
 shoreline:
   - row: 0
-    col: 6
-    terrain: grass
-    castable: false
-  - row: 0
     col: 7
-    terrain: grass
-    castable: false
+    terrain: sand
+    castable: true
   - row: 0
     col: 8
-    terrain: path
-    castable: false
+    terrain: sand
+    castable: true
   - row: 0
     col: 9
     terrain: path
     castable: false
   - row: 0
     col: 10
-    terrain: grass
+    terrain: path
     castable: false
   - row: 0
     col: 11
@@ -53,33 +54,45 @@ shoreline:
     col: 12
     terrain: grass
     castable: false
-  - row: 1
-    col: 5
+  - row: 0
+    col: 13
     terrain: grass
     castable: false
-  - row: 1
-    col: 6
-    terrain: path
+  - row: 0
+    col: 14
+    terrain: grass
     castable: false
-  - row: 1
-    col: 7
-    terrain: path
+  - row: 0
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 0
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 0
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 0
+    col: 18
+    terrain: grass
     castable: false
   - row: 1
     col: 8
-    terrain: path
-    castable: false
+    terrain: sand
+    castable: true
   - row: 1
     col: 9
-    terrain: path
-    castable: false
+    terrain: sand
+    castable: true
   - row: 1
     col: 10
-    terrain: grass
+    terrain: path
     castable: false
   - row: 1
     col: 11
-    terrain: grass
+    terrain: path
     castable: false
   - row: 1
     col: 12
@@ -89,25 +102,41 @@ shoreline:
     col: 13
     terrain: grass
     castable: false
-  - row: 2
-    col: 7
-    terrain: sand
-    castable: true
+  - row: 1
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 1
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 1
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 1
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 1
+    col: 18
+    terrain: grass
+    castable: false
   - row: 2
     col: 8
     terrain: sand
     castable: true
   - row: 2
     col: 9
-    terrain: path
+    terrain: sand
     castable: true
   - row: 2
     col: 10
-    terrain: grass
+    terrain: path
     castable: false
   - row: 2
     col: 11
-    terrain: grass
+    terrain: path
     castable: false
   - row: 2
     col: 12
@@ -117,10 +146,26 @@ shoreline:
     col: 13
     terrain: grass
     castable: false
-  - row: 3
-    col: 8
-    terrain: sand
-    castable: true
+  - row: 2
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 2
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 2
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 2
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 2
+    col: 18
+    terrain: grass
+    castable: false
   - row: 3
     col: 9
     terrain: sand
@@ -132,7 +177,7 @@ shoreline:
     castable: true
   - row: 3
     col: 11
-    terrain: grass
+    terrain: path
     castable: false
   - row: 3
     col: 12
@@ -142,24 +187,60 @@ shoreline:
     col: 13
     terrain: grass
     castable: false
-  - row: 4
-    col: 9
-    terrain: sand
-    castable: true
+  - row: 3
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 3
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 3
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 3
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 3
+    col: 18
+    terrain: grass
+    castable: false
   - row: 4
     col: 10
     terrain: sand
     castable: true
   - row: 4
     col: 11
+    terrain: sand
+    castable: true
+  - row: 4
+    col: 12
     terrain: path
     castable: false
   - row: 4
-    col: 12
+    col: 13
     terrain: grass
     castable: false
   - row: 4
-    col: 13
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 4
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 4
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 4
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 4
+    col: 18
     terrain: grass
     castable: false
   - row: 5
@@ -178,182 +259,506 @@ shoreline:
     col: 13
     terrain: grass
     castable: false
-  - row: 6
-    col: 10
-    terrain: sand
-    castable: true
+  - row: 5
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 5
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 5
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 5
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 5
+    col: 18
+    terrain: grass
+    castable: false
   - row: 6
     col: 11
     terrain: sand
     castable: true
   - row: 6
     col: 12
+    terrain: sand
+    castable: true
+  - row: 6
+    col: 13
     terrain: path
     castable: false
   - row: 6
-    col: 13
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 6
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 6
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 6
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 6
+    col: 18
     terrain: grass
     castable: false
   - row: 7
-    col: 10
+    col: 11
     terrain: sand
     castable: true
   - row: 7
-    col: 11
-    terrain: path
+    col: 12
+    terrain: sand
     castable: true
   - row: 7
-    col: 12
+    col: 13
+    terrain: path
+    castable: false
+  - row: 7
+    col: 14
     terrain: grass
     castable: false
   - row: 7
-    col: 13
+    col: 15
     terrain: grass
     castable: false
-  - row: 8
-    col: 9
-    terrain: sand
-    castable: true
-  - row: 8
-    col: 10
-    terrain: sand
-    castable: true
+  - row: 7
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 7
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 7
+    col: 18
+    terrain: grass
+    castable: false
   - row: 8
     col: 11
-    terrain: grass
-    castable: false
+    terrain: sand
+    castable: true
   - row: 8
     col: 12
+    terrain: sand
+    castable: true
+  - row: 8
+    col: 13
+    terrain: path
+    castable: false
+  - row: 8
+    col: 14
     terrain: grass
     castable: false
   - row: 8
-    col: 13
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 8
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 8
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 8
+    col: 18
     terrain: grass
     castable: false
   - row: 9
-    col: 8
+    col: 11
     terrain: sand
     castable: true
   - row: 9
-    col: 9
+    col: 12
     terrain: sand
     castable: true
   - row: 9
-    col: 10
+    col: 13
     terrain: path
     castable: false
   - row: 9
-    col: 11
+    col: 14
     terrain: grass
     castable: false
   - row: 9
-    col: 12
+    col: 15
     terrain: grass
     castable: false
   - row: 9
-    col: 13
+    col: 16
     terrain: grass
     castable: false
-  - row: 10
-    col: 7
-    terrain: sand
-    castable: true
-  - row: 10
-    col: 8
-    terrain: sand
-    castable: true
-  - row: 10
-    col: 9
-    terrain: path
-    castable: true
-  - row: 10
-    col: 10
+  - row: 9
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 9
+    col: 18
     terrain: grass
     castable: false
   - row: 10
     col: 11
-    terrain: grass
-    castable: false
+    terrain: sand
+    castable: true
   - row: 10
     col: 12
+    terrain: sand
+    castable: true
+  - row: 10
+    col: 13
+    terrain: path
+    castable: false
+  - row: 10
+    col: 14
     terrain: grass
     castable: false
   - row: 10
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 10
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 10
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 10
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 11
+    col: 10
+    terrain: sand
+    castable: true
+  - row: 11
+    col: 11
+    terrain: sand
+    castable: true
+  - row: 11
+    col: 12
+    terrain: path
+    castable: false
+  - row: 11
     col: 13
     terrain: grass
     castable: false
   - row: 11
-    col: 6
-    terrain: path
+    col: 14
+    terrain: grass
     castable: false
   - row: 11
-    col: 7
-    terrain: sand
-    castable: true
+    col: 15
+    terrain: grass
+    castable: false
   - row: 11
-    col: 8
-    terrain: sand
-    castable: true
+    col: 16
+    terrain: grass
+    castable: false
   - row: 11
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 11
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 12
     col: 9
+    terrain: sand
+    castable: true
+  - row: 12
+    col: 10
+    terrain: sand
+    castable: true
+  - row: 12
+    col: 11
     terrain: path
     castable: false
-  - row: 11
-    col: 10
-    terrain: grass
-    castable: false
-  - row: 11
-    col: 11
-    terrain: grass
-    castable: false
-  - row: 11
+  - row: 12
     col: 12
     terrain: grass
     castable: false
-  - row: 11
+  - row: 12
     col: 13
     terrain: grass
     castable: false
   - row: 12
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 12
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 12
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 12
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 12
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 9
+    terrain: sand
+    castable: true
+  - row: 13
+    col: 10
+    terrain: sand
+    castable: true
+  - row: 13
+    col: 11
+    terrain: path
+    castable: true
+  - row: 13
+    col: 12
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 13
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 13
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 14
+    col: 8
+    terrain: sand
+    castable: true
+  - row: 14
+    col: 9
+    terrain: sand
+    castable: true
+  - row: 14
+    col: 10
+    terrain: path
+    castable: true
+  - row: 14
+    col: 11
+    terrain: path
+    castable: false
+  - row: 14
+    col: 12
+    terrain: path
+    castable: false
+  - row: 14
+    col: 13
+    terrain: grass
+    castable: false
+  - row: 14
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 14
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 14
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 14
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 14
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 7
+    terrain: sand
+    castable: true
+  - row: 15
+    col: 8
+    terrain: sand
+    castable: true
+  - row: 15
+    col: 9
+    terrain: path
+    castable: true
+  - row: 15
+    col: 10
+    terrain: path
+    castable: false
+  - row: 15
+    col: 11
+    terrain: path
+    castable: false
+  - row: 15
+    col: 12
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 13
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 15
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 6
+    terrain: sand
+    castable: true
+  - row: 16
+    col: 7
+    terrain: sand
+    castable: true
+  - row: 16
+    col: 8
+    terrain: path
+    castable: true
+  - row: 16
+    col: 9
+    terrain: path
+    castable: false
+  - row: 16
+    col: 10
+    terrain: path
+    castable: false
+  - row: 16
+    col: 11
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 12
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 13
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 16
+    col: 18
+    terrain: grass
+    castable: false
+  - row: 17
     col: 5
-    terrain: grass
-    castable: false
-  - row: 12
+    terrain: sand
+    castable: true
+  - row: 17
     col: 6
-    terrain: path
-    castable: false
-  - row: 12
+    terrain: sand
+    castable: true
+  - row: 17
     col: 7
     terrain: path
-    castable: false
-  - row: 12
+    castable: true
+  - row: 17
     col: 8
     terrain: path
     castable: false
-  - row: 12
+  - row: 17
     col: 9
-    terrain: grass
+    terrain: path
     castable: false
-  - row: 12
+  - row: 17
     col: 10
     terrain: grass
     castable: false
-  - row: 12
+  - row: 17
     col: 11
     terrain: grass
     castable: false
-  - row: 12
+  - row: 17
     col: 12
     terrain: grass
     castable: false
-  - row: 12
+  - row: 17
     col: 13
+    terrain: grass
+    castable: false
+  - row: 17
+    col: 14
+    terrain: grass
+    castable: false
+  - row: 17
+    col: 15
+    terrain: grass
+    castable: false
+  - row: 17
+    col: 16
+    terrain: grass
+    castable: false
+  - row: 17
+    col: 17
+    terrain: grass
+    castable: false
+  - row: 17
+    col: 18
     terrain: grass
     castable: false
 reservedZones:
   - id: future-overlay
-    x: 336
-    y: 18
-    width: 90
-    height: 54
+    x: 352
+    y: 20
+    width: 96
+    height: 60
     label: Future content overlay

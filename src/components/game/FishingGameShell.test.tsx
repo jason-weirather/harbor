@@ -112,4 +112,33 @@ describe("FishingGameShell", () => {
       "/plain/artifacts/dock-checklist/",
     );
   });
+
+  it("can minimize and expand the catch rail without hiding the game status", () => {
+    render(<FishingGameShell manifest={manifest} />);
+
+    const rail = document.getElementById("catch-rail");
+
+    expect(rail).not.toHaveAttribute("hidden");
+    expect(screen.getByText(/Stand 3:10/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("toggle-hud"));
+
+    expect(rail).toHaveAttribute("hidden");
+    expect(screen.getByRole("button", { name: /Expand rail/i })).toBeInTheDocument();
+    expect(screen.getByText(/Stand 3:10/)).toBeInTheDocument();
+  });
+
+  it("exports the visible scene canvas as a png", () => {
+    const toDataUrlSpy = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL");
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    render(<FishingGameShell manifest={manifest} />);
+
+    fireEvent.click(screen.getByTestId("export-scene"));
+
+    expect(toDataUrlSpy).toHaveBeenCalledWith("image/png");
+    expect(clickSpy).toHaveBeenCalled();
+  });
 });

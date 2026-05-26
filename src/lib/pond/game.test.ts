@@ -10,7 +10,7 @@ import {
 describe("pond game helpers", () => {
   it("only allows casts on playable tiles", () => {
     expect(canCast({ row: 7, col: 4 }, manifest.pond.mask)).toBe(true);
-    expect(canCast({ row: 0, col: 0 }, manifest.pond.mask)).toBe(false);
+    expect(canCast({ row: 0, col: 18 }, manifest.pond.mask)).toBe(false);
   });
 
   it("moves the selected tile in the requested direction", () => {

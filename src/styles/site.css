@@ -232,18 +232,25 @@ a {
 }
 
 .fishing-game {
+  --fishing-hud-height: clamp(16.5rem, 29vh, 21rem);
+  --fishing-hud-height-collapsed: clamp(4.25rem, 6.5vh, 5.4rem);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) var(--fishing-hud-height);
   height: 100vh;
   isolation: isolate;
-  position: relative;
   width: 100%;
+}
+
+.fishing-game.is-hud-collapsed {
+  grid-template-rows: minmax(0, 1fr) var(--fishing-hud-height-collapsed);
 }
 
 .fishing-game__scene {
   background: linear-gradient(180deg, #cfefff 0%, #7ecfdf 100%);
-  inset: 0;
+  min-height: 0;
   outline: none;
   overflow: hidden;
-  position: absolute;
+  position: relative;
 }
 
 .fishing-game__scene:focus-visible {
@@ -288,14 +295,14 @@ a {
 
 .fishing-game__hud {
   border-radius: 1.55rem 1.55rem 0 0;
-  bottom: 0;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.95rem;
-  left: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 0.78rem 0.9rem 0.9rem;
-  position: fixed;
-  right: 0;
-  z-index: 4;
+  position: relative;
+  z-index: 1;
 }
 
 .fishing-game__summary {
@@ -346,6 +353,15 @@ a {
   justify-content: flex-end;
 }
 
+.fishing-game.is-hud-collapsed .fishing-game__summary span {
+  display: none;
+}
+
+.fishing-game.is-hud-collapsed .fishing-game__hud {
+  gap: 0.6rem;
+  padding-bottom: 0.75rem;
+}
+
 .fishing-chip,
 .fishing-status-pill {
   background: rgba(30, 144, 167, 0.1);
@@ -360,9 +376,25 @@ a {
 }
 
 .fishing-game__rail {
+  align-items: stretch;
   display: grid;
   gap: 0.7rem;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-columns: minmax(16.5rem, 19rem);
+  grid-auto-flow: column;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 0.35rem;
+  padding-right: 0.2rem;
+  scroll-snap-type: x proximity;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fishing-game__rail[hidden] {
+  display: none;
 }
 
 .fish-rail-card {
@@ -370,10 +402,14 @@ a {
   border: 1px solid rgba(22, 50, 74, 0.08);
   border-radius: 1.15rem;
   display: grid;
-  gap: 0.55rem;
+  column-gap: 0.7rem;
+  row-gap: 0.28rem;
   grid-template-columns: auto 1fr;
-  min-height: 6.5rem;
+  grid-template-rows: auto auto;
+  height: 100%;
+  min-height: 6.75rem;
   padding: 0.66rem;
+  scroll-snap-align: start;
 }
 
 .fish-rail-card--empty {
@@ -389,6 +425,7 @@ a {
     linear-gradient(135deg, var(--fish-accent), rgba(255, 255, 255, 0.16));
   border-radius: 0.95rem;
   box-shadow: inset 0 -8px 16px rgba(15, 23, 42, 0.12);
+  grid-row: 1 / span 2;
   height: 2.6rem;
   width: 2.6rem;
 }
@@ -396,6 +433,11 @@ a {
 .fish-rail-card__copy {
   display: grid;
   gap: 0.15rem;
+  grid-column: 2;
+  grid-row: 1;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .fish-rail-card__copy strong {
@@ -411,6 +453,12 @@ a {
 .fish-rail-card__copy a {
   font-size: 0.92rem;
   font-weight: 700;
+}
+
+.fish-rail-card > .pond-link-button {
+  align-self: end;
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .pond-button,
@@ -447,6 +495,11 @@ a {
   color: white;
 }
 
+.pond-button--compact {
+  font-size: 0.84rem;
+  padding: 0.46rem 0.72rem;
+}
+
 .pond-link-button {
   background: transparent;
   justify-self: start;
@@ -471,7 +524,7 @@ a {
   }
 
   .fishing-game__rail {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-columns: minmax(14.5rem, 16rem);
   }
 }
 
@@ -492,7 +545,13 @@ a {
   }
 
   .fishing-game {
+    grid-template-rows: minmax(18rem, 1fr) auto;
     min-height: 100vh;
+    height: auto;
+  }
+
+  .fishing-game.is-hud-collapsed {
+    grid-template-rows: minmax(18rem, 1fr) auto;
   }
 
   .fishing-game__hud {
@@ -501,9 +560,9 @@ a {
   }
 
   .fishing-game__rail {
-    grid-template-columns: 1fr;
-    max-height: 15.5rem;
-    overflow: auto;
+    grid-auto-columns: minmax(13.5rem, 15rem);
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .fish-rail-card {

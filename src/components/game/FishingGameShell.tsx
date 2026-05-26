@@ -17,6 +17,8 @@ import type {
   PondManifest,
   ShoreTile,
   Tile,
+  TileOrigin,
+  TileSize,
 } from "../../lib/pond/types";
 
 interface FishingGameShellProps {
@@ -58,14 +60,16 @@ function getArtifactHref(artifact: ArtifactSummary) {
 }
 
 function isTileInsideReservedZone(
-  manifest: PondManifest,
   tile: Tile,
   kind: "land" | "water",
+  tileSize: TileSize,
+  origin: TileOrigin,
+  reservedZones: PondManifest["pond"]["reservedZones"],
 ) {
-  const center = projectTile(tile, manifest.pond.tile, manifest.pond.origin);
+  const center = projectTile(tile, tileSize, origin);
   const padding = kind === "water" ? 4 : 6;
 
-  return manifest.pond.reservedZones.some((zone) => {
+  return reservedZones.some((zone) => {
     return (
       center.x >= zone.x - padding &&
       center.x <= zone.x + zone.width + padding &&
@@ -176,12 +180,12 @@ function getFisherPose(mode: GameMode, frame: number): FisherPose {
   };
 }
 
-function getRodTipPosition(x: number, y: number, mode: GameMode, frame: number) {
+function getRodTipPosition(x: number, y: number, mode: GameMode, frame: number, scale = 1) {
   const pose = getFisherPose(mode, frame);
 
   return {
-    x: x + 21,
-    y: y - 18 - pose.rodLift + pose.bob,
+    x: x + 30 * scale,
+    y: y - (26 + pose.rodLift) * scale + pose.bob * scale,
   };
 }
 
@@ -193,6 +197,36 @@ function easeInOut(progress: number) {
   return progress < 0.5
     ? 4 * progress * progress * progress
     : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+}
+
+function getProjectedBounds(
+  tiles: Tile[],
+  tileSize: TileSize,
+  origin: TileOrigin = { x: 0, y: 0 },
+) {
+  const halfWidth = tileSize.width / 2;
+  const halfHeight = tileSize.height / 2;
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const tile of tiles) {
+    const center = projectTile(tile, tileSize, origin);
+    minX = Math.min(minX, center.x - halfWidth);
+    maxX = Math.max(maxX, center.x + halfWidth);
+    minY = Math.min(minY, center.y - halfHeight);
+    maxY = Math.max(maxY, center.y + halfHeight);
+  }
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
 }
 
 function drawDiamond(
@@ -230,11 +264,18 @@ function drawPixelRect(
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
 }
 
-function drawPixelTree(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  drawPixelRect(ctx, x - 2, y + 6, 4, 12, "#6d4a31");
-  drawPixelRect(ctx, x - 8, y + 1, 16, 7, "#366b4d");
-  drawPixelRect(ctx, x - 6, y - 5, 12, 6, "#4a885f");
-  drawPixelRect(ctx, x - 3, y - 11, 6, 6, "#5ba46d");
+function drawPixelTree(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -3, 10, 6, 18, "#65412a");
+  drawPixelRect(ctx, -1, 6, 2, 5, "#89603f");
+  drawPixelRect(ctx, -14, 4, 28, 8, "#2d5d43");
+  drawPixelRect(ctx, -12, -2, 24, 8, "#36704d");
+  drawPixelRect(ctx, -10, -9, 20, 8, "#4a8d5b");
+  drawPixelRect(ctx, -7, -15, 14, 7, "#5da96a");
+  drawPixelRect(ctx, -3, -20, 6, 6, "#81ca7d");
+  ctx.restore();
 }
 
 function drawPixelBush(ctx: CanvasRenderingContext2D, x: number, y: number) {
@@ -268,26 +309,43 @@ function drawWaterTileDetails(
   y: number,
   frame: number,
   variant: number,
+  detailScale: number,
   deep = false,
 ) {
   const shimmer = (frame + variant) % 6;
   const foam = deep ? "rgba(185, 235, 248, 0.56)" : "rgba(225, 252, 255, 0.82)";
   const shadow = deep ? "rgba(22, 87, 117, 0.42)" : "rgba(41, 113, 141, 0.28)";
   const glow = deep ? "#6fd1ec" : "#a9eff8";
+  const pixel = Math.max(1, Math.round(detailScale * 0.6));
+  const wave = (
+    dx: number,
+    dy: number,
+    width: number,
+    height: number,
+    color: string,
+  ) => {
+    drawPixelRect(ctx, x + dx * pixel, y + dy * pixel, width * pixel, height * pixel, color);
+  };
 
-  drawPixelRect(ctx, x - 9, y - 3, 3, 1, glow);
-  drawPixelRect(ctx, x - 4, y - 5, 4, 1, foam);
-  drawPixelRect(ctx, x + 3, y - 2, 5, 1, foam);
-  drawPixelRect(ctx, x - 6 + shimmer, y + 1, 4, 1, foam);
-  drawPixelRect(ctx, x + 1 - shimmer, y + 3, 3, 1, shadow);
-  drawPixelRect(ctx, x - 1, y + 5, 5, 1, shadow);
+  wave(-12, -5, 4, 1, glow);
+  wave(-6, -7, 6, 1, foam);
+  wave(2, -5, 6, 1, foam);
+  wave(-10 + shimmer, -1, 5, 1, foam);
+  wave(-2 + shimmer, 1, 4, 1, glow);
+  wave(6 - shimmer, 0, 4, 1, foam);
+  wave(-8, 4, 5, 1, shadow);
+  wave(1 - shimmer, 5, 4, 1, shadow);
+  wave(7, 3, 3, 1, glow);
+  wave(-3, 7, 6, 1, shadow);
 
   if (variant % 2 === 0) {
-    drawPixelRect(ctx, x - 11, y + 1, 2, 1, foam);
-    drawPixelRect(ctx, x + 6, y + 1, 2, 1, glow);
+    wave(-13, 2, 2, 1, foam);
+    wave(9, 2, 3, 1, glow);
+    wave(-1, -3, 2, 1, foam);
   } else {
-    drawPixelRect(ctx, x - 8, y - 1, 2, 1, shadow);
-    drawPixelRect(ctx, x + 8, y - 4, 2, 1, foam);
+    wave(-9, -2, 3, 1, shadow);
+    wave(10, -4, 3, 1, foam);
+    wave(2, 6, 2, 1, shadow);
   }
 }
 
@@ -305,12 +363,13 @@ function drawPixelFish(
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(direction * scale, scale);
-  drawPixelRect(ctx, -7, -2, 9, 4, accent);
-  drawPixelRect(ctx, -3, -5, 5, 2, accent);
-  drawPixelRect(ctx, -2, 2, 5, 2, accent);
-  drawPixelRect(ctx, 2, -3 - wag, 4, 6 + wag * 2, accent);
-  drawPixelRect(ctx, -6, -1, 1, 1, "#10243a");
-  drawPixelRect(ctx, -9, -1, 2, 1, "#d3f7ff");
+  drawPixelRect(ctx, -11, -3, 14, 6, accent);
+  drawPixelRect(ctx, -7, -6, 8, 3, accent);
+  drawPixelRect(ctx, -6, 3, 7, 3, accent);
+  drawPixelRect(ctx, 3, -4 - wag, 6, 8 + wag * 2, accent);
+  drawPixelRect(ctx, -9, -1, 2, 2, "#10243a");
+  drawPixelRect(ctx, -13, -1, 3, 2, "#d3f7ff");
+  drawPixelRect(ctx, -1, -1, 4, 1, "rgba(255,255,255,0.25)");
   ctx.restore();
 }
 
@@ -337,28 +396,31 @@ function drawPixelFisher(
   y: number,
   mode: GameMode,
   frame: number,
+  scale = 1,
 ) {
   const pose = getFisherPose(mode, frame);
   const bodyColor = "#cb5d43";
   const hatColor = "#efc94e";
-
-  drawPixelRect(ctx, x - 9, y + 13, 18, 4, "rgba(22,50,74,0.22)");
-  drawPixelRect(ctx, x - 3, y + 5 + pose.bob, 2, 7, "#2b4158");
-  drawPixelRect(ctx, x + 1, y + 5 + pose.bob, 2, 7, "#2b4158");
-  drawPixelRect(ctx, x - 5, y - 1 + pose.bob, 10, 8, bodyColor);
-  drawPixelRect(ctx, x - 3, y - 8 + pose.bob, 6, 6, "#f5d3a4");
-  drawPixelRect(ctx, x - 7, y - 12 + pose.bob, 14, 4, hatColor);
-  drawPixelRect(ctx, x - 3, y - 15 + pose.bob, 6, 3, hatColor);
-  drawPixelRect(ctx, x - 7, y + 11 + pose.bob, 4, 3, "#5a3d2b");
-  drawPixelRect(ctx, x + 3, y + 11 + pose.bob, 4, 3, "#5a3d2b");
-
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -12, 18 + pose.bob, 24, 5, "rgba(22,50,74,0.22)");
+  drawPixelRect(ctx, -5, 7 + pose.bob, 3, 10, "#2b4158");
+  drawPixelRect(ctx, 2, 7 + pose.bob, 3, 10, "#2b4158");
+  drawPixelRect(ctx, -8, -1 + pose.bob, 16, 12, bodyColor);
+  drawPixelRect(ctx, -6, -11 + pose.bob, 12, 9, "#f5d3a4");
+  drawPixelRect(ctx, -10, -16 + pose.bob, 20, 4, hatColor);
+  drawPixelRect(ctx, -4, -20 + pose.bob, 10, 4, hatColor);
+  drawPixelRect(ctx, -10, 15 + pose.bob, 6, 4, "#5a3d2b");
+  drawPixelRect(ctx, 4, 15 + pose.bob, 6, 4, "#5a3d2b");
   ctx.strokeStyle = "#244a67";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(Math.round(x + 4), Math.round(y + 2 - pose.armLift + pose.bob));
-  ctx.lineTo(Math.round(x + 11), Math.round(y - 4 - pose.armLift + pose.bob));
-  ctx.lineTo(Math.round(x + 21), Math.round(y - 18 - pose.rodLift + pose.bob));
+  ctx.moveTo(Math.round(6), Math.round(2 - pose.armLift + pose.bob));
+  ctx.lineTo(Math.round(16), Math.round(-7 - pose.armLift + pose.bob));
+  ctx.lineTo(Math.round(30), Math.round(-26 - pose.rodLift + pose.bob));
   ctx.stroke();
+  ctx.restore();
 }
 
 function clearTimers(timerRef: MutableRefObject<number[]>) {
@@ -371,11 +433,25 @@ export default function FishingGameShell({
   title = "Harbor Fishing Prototype",
 }: FishingGameShellProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number[]>([]);
   const creelRef = useRef<CatchInstance[]>([]);
   const selectedWaterRef = useRef<Tile>();
   const reelingStartedAtRef = useRef<number>();
   const waterTiles = useMemo(() => getPlayableTiles(manifest.pond.mask), [manifest.pond.mask]);
+  const defaultPlayerTile = useMemo<ShoreTile>(
+    () =>
+      manifest.pond.shoreline.find((tile) => tile.dock) ??
+      manifest.pond.shoreline.find((tile) => tile.castable) ??
+      manifest.pond.shoreline[0],
+    [manifest.pond.shoreline],
+  );
+  const focusTile = useMemo<Tile>(
+    () =>
+      manifest.pond.shoreline.find((tile) => tile.row === 6 && tile.col === 11) ??
+      defaultPlayerTile,
+    [defaultPlayerTile, manifest.pond.shoreline],
+  );
   const backdropTiles = useMemo(() => buildBackdropTiles(), []);
   const ambientFish = useMemo<AmbientFish[]>(
     () => [
@@ -385,7 +461,7 @@ export default function FishingGameShell({
         delay: 0,
         duration: 9800,
         direction: 1,
-        size: 1,
+        size: 1.3,
       },
       {
         tile: { row: 5, col: 3 },
@@ -393,7 +469,7 @@ export default function FishingGameShell({
         delay: 700,
         duration: 11400,
         direction: -1,
-        size: 0.9,
+        size: 1.15,
       },
       {
         tile: { row: 8, col: 2 },
@@ -401,7 +477,7 @@ export default function FishingGameShell({
         delay: 1400,
         duration: 12600,
         direction: 1,
-        size: 1.1,
+        size: 1.35,
       },
       {
         tile: { row: 10, col: 4 },
@@ -409,7 +485,7 @@ export default function FishingGameShell({
         delay: 2400,
         duration: 10200,
         direction: -1,
-        size: 0.85,
+        size: 1.05,
       },
       {
         tile: { row: 4, col: 6 },
@@ -417,7 +493,7 @@ export default function FishingGameShell({
         delay: 3300,
         duration: 13200,
         direction: -1,
-        size: 0.95,
+        size: 1.2,
       },
       {
         tile: { row: 9, col: 5 },
@@ -425,7 +501,7 @@ export default function FishingGameShell({
         delay: 4100,
         duration: 14100,
         direction: 1,
-        size: 0.8,
+        size: 1.05,
       },
       {
         tile: { row: 6, col: 1 },
@@ -433,13 +509,13 @@ export default function FishingGameShell({
         delay: 5200,
         duration: 11800,
         direction: 1,
-        size: 0.88,
+        size: 1.12,
       },
     ],
     [],
   );
 
-  const [playerTile, setPlayerTile] = useState<ShoreTile>(manifest.pond.shoreline[0]);
+  const [playerTile, setPlayerTile] = useState<ShoreTile>(defaultPlayerTile);
   const [selectedWaterTile, setSelectedWaterTile] = useState<Tile>();
   const [hoveredWaterTile, setHoveredWaterTile] = useState<Tile>();
   const [gameState, setGameState] = useState<GameMode>("idle");
@@ -447,12 +523,61 @@ export default function FishingGameShell({
   const [castNumber, setCastNumber] = useState(0);
   const [lastCatch, setLastCatch] = useState<CatchInstance>();
   const [activeCatchPreview, setActiveCatchPreview] = useState<CatchInstance>();
+  const [isHudCollapsed, setIsHudCollapsed] = useState(false);
+  const [sceneSize, setSceneSize] = useState(manifest.pond.viewBox);
   const [statusMessage, setStatusMessage] = useState(
     "Move across the left shoreline, hover the water to line up a cast, and let the fisher handle the fight.",
   );
 
   const isCreelFull = creel.length >= MAX_CREEL_SIZE;
   const score = creel.reduce((sum, item) => sum + item.points, 0);
+  const sceneWidth = sceneSize.width > 0 ? sceneSize.width : manifest.pond.viewBox.width;
+  const sceneHeight = sceneSize.height > 0 ? sceneSize.height : manifest.pond.viewBox.height;
+  const camera = useMemo(() => {
+    const safeBottom = Math.max(18, sceneHeight * 0.035);
+    const baseScale =
+      Math.max(
+        sceneWidth / manifest.pond.viewBox.width,
+        sceneHeight / manifest.pond.viewBox.height,
+      ) * 1.42;
+    const tileSize = {
+      width: manifest.pond.tile.width * baseScale,
+      height: manifest.pond.tile.height * baseScale,
+    };
+    const focusBounds = getProjectedBounds([focusTile], tileSize);
+    const desiredPlayerX = sceneWidth * 0.24;
+    const desiredPlayerY = sceneHeight - safeBottom - tileSize.height * 2;
+    const origin = {
+      x: desiredPlayerX - (focusBounds.minX + tileSize.width / 2),
+      y: desiredPlayerY - (focusBounds.minY + tileSize.height / 2),
+    };
+    const reservedZones = manifest.pond.reservedZones.map((zone) => ({
+      ...zone,
+      x: (zone.x / manifest.pond.viewBox.width) * sceneWidth,
+      y: (zone.y / manifest.pond.viewBox.height) * sceneHeight,
+      width: (zone.width / manifest.pond.viewBox.width) * sceneWidth,
+      height: (zone.height / manifest.pond.viewBox.height) * sceneHeight,
+    }));
+
+    return {
+      origin,
+      reservedZones,
+      tileSize,
+      viewportHeight: Math.max(1, Math.round(sceneHeight)),
+      viewportWidth: Math.max(1, Math.round(sceneWidth)),
+    };
+  }, [
+    focusTile,
+    manifest.pond.reservedZones,
+    manifest.pond.tile,
+    manifest.pond.viewBox.height,
+    manifest.pond.viewBox.width,
+    sceneHeight,
+    sceneWidth,
+  ]);
+  const projectSceneTile = (tile: Tile) => projectTile(tile, camera.tileSize, camera.origin);
+  const tileIsReserved = (tile: Tile, kind: "land" | "water") =>
+    isTileInsideReservedZone(tile, kind, camera.tileSize, camera.origin, camera.reservedZones);
   const activeWaterTile = hoveredWaterTile ?? selectedWaterTile;
   const activeWaterInRange =
     activeWaterTile && isTileWithinCastRange(playerTile, activeWaterTile)
@@ -462,14 +587,15 @@ export default function FishingGameShell({
     gameState === "waiting" || gameState === "hooked" || gameState === "reeling"
       ? selectedWaterTile
       : activeWaterInRange;
-  const playerCenter = projectTile(playerTile, manifest.pond.tile, manifest.pond.origin);
-  const dockCenter = projectTile({ row: 3, col: 10 }, manifest.pond.tile, manifest.pond.origin);
-  const northTreeCenter = projectTile({ row: 0, col: 12 }, manifest.pond.tile, manifest.pond.origin);
-  const ridgeTreeCenter = projectTile({ row: 5, col: 13 }, manifest.pond.tile, manifest.pond.origin);
-  const southTreeCenter = projectTile({ row: 12, col: 10 }, manifest.pond.tile, manifest.pond.origin);
-  const bushCenter = projectTile({ row: 9, col: 13 }, manifest.pond.tile, manifest.pond.origin);
-  const lowerBushCenter = projectTile({ row: 12, col: 13 }, manifest.pond.tile, manifest.pond.origin);
-  const shoreRockCenter = projectTile({ row: 4, col: 12 }, manifest.pond.tile, manifest.pond.origin);
+  const playerCenter = projectSceneTile(playerTile);
+  const dockCenter = projectSceneTile({ row: 3, col: 10 });
+  const upperTreeCenter = projectSceneTile({ row: 3, col: 12 });
+  const ridgeTreeCenter = projectSceneTile({ row: 5, col: 13 });
+  const lowerTreeCenter = projectSceneTile({ row: 6, col: 14 });
+  const edgeTreeCenter = projectSceneTile({ row: 7, col: 14 });
+  const bushCenter = projectSceneTile({ row: 9, col: 13 });
+  const lowerBushCenter = projectSceneTile({ row: 12, col: 13 });
+  const shoreRockCenter = projectSceneTile({ row: 4, col: 12 });
   const statusHeading = getStatusHeading(gameState, sceneWaterTile, isCreelFull);
 
   useEffect(() => {
@@ -479,6 +605,41 @@ export default function FishingGameShell({
   useEffect(() => {
     selectedWaterRef.current = selectedWaterTile;
   }, [selectedWaterTile]);
+
+  useEffect(() => {
+    const updateLayout = () => {
+      const nextSceneBox = sceneRef.current?.getBoundingClientRect();
+
+      if (nextSceneBox && nextSceneBox.width > 0 && nextSceneBox.height > 0) {
+        setSceneSize((current) =>
+          current.width === nextSceneBox.width && current.height === nextSceneBox.height
+            ? current
+            : {
+                width: nextSceneBox.width,
+                height: nextSceneBox.height,
+              },
+        );
+      }
+    };
+
+    updateLayout();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const resizeObserver = new ResizeObserver(() => {
+        updateLayout();
+      });
+
+      if (sceneRef.current) {
+        resizeObserver.observe(sceneRef.current);
+      }
+
+      return () => resizeObserver.disconnect();
+    }
+
+    window.addEventListener("resize", updateLayout);
+
+    return () => window.removeEventListener("resize", updateLayout);
+  }, []);
 
   useEffect(() => {
     if (isCreelFull && gameState === "idle") {
@@ -521,21 +682,25 @@ export default function FishingGameShell({
       return undefined;
     }
 
-    const halfWidth = manifest.pond.tile.width / 2;
-    const halfHeight = manifest.pond.tile.height / 2;
+    const halfWidth = camera.tileSize.width / 2;
+    const halfHeight = camera.tileSize.height / 2;
 
     const draw = (time: number) => {
       const frame = Math.floor(time / 180);
-      const fisherY = playerCenter.y - 5;
-      const rodTip = getRodTipPosition(playerCenter.x, fisherY, gameState, frame);
-      ctx.clearRect(0, 0, manifest.pond.viewBox.width, manifest.pond.viewBox.height);
+      const detailScale = camera.tileSize.width / manifest.pond.tile.width;
+      const fisherScale = Math.max(1.6, Math.min(2.35, detailScale * 0.43));
+      const treeScale = Math.max(1.7, Math.min(2.75, detailScale * 0.5));
+      const fishScaleBoost = Math.max(1.35, Math.min(2.1, detailScale * 0.32));
+      const fisherY = playerCenter.y - 8;
+      const rodTip = getRodTipPosition(playerCenter.x, fisherY, gameState, frame, fisherScale);
+      ctx.clearRect(0, 0, camera.viewportWidth, camera.viewportHeight);
       ctx.imageSmoothingEnabled = false;
 
       ctx.fillStyle = "#cdeff5";
-      ctx.fillRect(0, 0, manifest.pond.viewBox.width, manifest.pond.viewBox.height);
+      ctx.fillRect(0, 0, camera.viewportWidth, camera.viewportHeight);
 
       for (const tile of backdropTiles) {
-        const center = projectTile(tile, manifest.pond.tile, manifest.pond.origin);
+        const center = projectSceneTile(tile);
         drawDiamond(
           ctx,
           center.x,
@@ -548,7 +713,7 @@ export default function FishingGameShell({
       }
 
       for (const tile of waterTiles) {
-        const center = projectTile(tile, manifest.pond.tile, manifest.pond.origin);
+        const center = projectSceneTile(tile);
         const isHovered = tileMatches(tile, hoveredWaterTile);
         const isSelected = tileMatches(tile, selectedWaterTile);
         const isInRange = isTileWithinCastRange(playerTile, tile);
@@ -578,11 +743,19 @@ export default function FishingGameShell({
                 : "#ef4444"
               : "#2b7c95",
         );
-        drawWaterTileDetails(ctx, center.x, center.y, frame, tile.row + tile.col, isDeep);
+        drawWaterTileDetails(
+          ctx,
+          center.x,
+          center.y,
+          frame,
+          tile.row + tile.col,
+          detailScale,
+          isDeep,
+        );
       }
 
       for (const tile of manifest.pond.shoreline) {
-        const center = projectTile(tile, manifest.pond.tile, manifest.pond.origin);
+        const center = projectSceneTile(tile);
         const isPlayer = tileMatches(tile, playerTile);
 
         drawDiamond(
@@ -607,9 +780,10 @@ export default function FishingGameShell({
       }
 
       drawPixelDock(ctx, dockCenter.x + 8, dockCenter.y + 3);
-      drawPixelTree(ctx, northTreeCenter.x + 12, northTreeCenter.y - 26);
-      drawPixelTree(ctx, ridgeTreeCenter.x + 8, ridgeTreeCenter.y - 22);
-      drawPixelTree(ctx, southTreeCenter.x + 6, southTreeCenter.y - 18);
+      drawPixelTree(ctx, upperTreeCenter.x + 10, upperTreeCenter.y - 38, treeScale * 1.1);
+      drawPixelTree(ctx, ridgeTreeCenter.x + 10, ridgeTreeCenter.y - 32, treeScale * 1.02);
+      drawPixelTree(ctx, lowerTreeCenter.x + 8, lowerTreeCenter.y - 28, treeScale * 0.95);
+      drawPixelTree(ctx, edgeTreeCenter.x + 10, edgeTreeCenter.y - 26, treeScale * 0.88);
       drawPixelBush(ctx, bushCenter.x + 6, bushCenter.y - 8);
       drawPixelBush(ctx, lowerBushCenter.x + 2, lowerBushCenter.y - 4);
       drawPixelRock(ctx, shoreRockCenter.x + 14, shoreRockCenter.y - 2);
@@ -618,7 +792,7 @@ export default function FishingGameShell({
       drawPixelReeds(ctx, dockCenter.x - 7, dockCenter.y + 40, frame + 2);
 
       for (const fish of ambientFish) {
-        const center = projectTile(fish.tile, manifest.pond.tile, manifest.pond.origin);
+        const center = projectSceneTile(fish.tile);
         const wave = Math.sin((time + fish.delay) / fish.duration) * 16;
         const wiggle = Math.cos((time + fish.delay) / (fish.duration / 2)) * 6;
         drawPixelFish(
@@ -627,13 +801,13 @@ export default function FishingGameShell({
           center.y + 4 + wiggle,
           fish.accent,
           fish.direction,
-          fish.size,
+          fish.size * fishScaleBoost,
           frame,
         );
       }
 
       if (sceneWaterTile) {
-        const targetCenter = projectTile(sceneWaterTile, manifest.pond.tile, manifest.pond.origin);
+        const targetCenter = projectSceneTile(sceneWaterTile);
         const currentLineEnd =
           gameState === "reeling" && reelingStartedAtRef.current
             ? {
@@ -690,7 +864,7 @@ export default function FishingGameShell({
             hookedFishCenter.y,
             activeCatchPreview.accent,
             rodTip.x > hookedFishCenter.x ? 1 : -1,
-            0.95,
+            fishScaleBoost * 1.05,
             frame,
           );
         }
@@ -700,7 +874,7 @@ export default function FishingGameShell({
         }
       }
 
-      drawPixelFisher(ctx, playerCenter.x, fisherY, gameState, frame);
+      drawPixelFisher(ctx, playerCenter.x, fisherY, gameState, frame, fisherScale);
 
       rafId = window.requestAnimationFrame(draw);
     };
@@ -711,10 +885,12 @@ export default function FishingGameShell({
   }, [
     ambientFish,
     backdropTiles,
+    camera,
     dockCenter,
     gameState,
     hoveredWaterTile,
     manifest,
+    lowerTreeCenter,
     playerCenter,
     playerTile,
     ridgeTreeCenter,
@@ -722,10 +898,10 @@ export default function FishingGameShell({
     activeCatchPreview,
     selectedWaterTile,
     shoreRockCenter,
-    southTreeCenter,
     bushCenter,
     lowerBushCenter,
-    northTreeCenter,
+    upperTreeCenter,
+    edgeTreeCenter,
     waterTiles,
   ]);
 
@@ -739,7 +915,7 @@ export default function FishingGameShell({
 
   function handleMoveToLand(tile: ShoreTile) {
 
-    if (isTileInsideReservedZone(manifest, tile, "land")) {
+    if (tileIsReserved(tile, "land")) {
       return;
     }
 
@@ -760,7 +936,7 @@ export default function FishingGameShell({
       return;
     }
 
-    if (!canCast(tile, manifest.pond.mask) || isTileInsideReservedZone(manifest, tile, "water")) {
+    if (!canCast(tile, manifest.pond.mask) || tileIsReserved(tile, "water")) {
       return;
     }
 
@@ -869,24 +1045,46 @@ export default function FishingGameShell({
     );
   }
 
+  function handleExportScenePng() {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const imageUrl = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+
+    link.href = imageUrl;
+    link.download = `clubhouse-pond-scene-${canvas.width}x${canvas.height}.png`;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   return (
-    <section className="fishing-game" aria-label="Pixel fishing prototype">
+    <section
+      className={`fishing-game${isHudCollapsed ? " is-hud-collapsed" : ""}`}
+      aria-label="Pixel fishing prototype"
+    >
       <div
         className="fishing-game__scene"
+        ref={sceneRef}
         tabIndex={0}
         aria-label={`Click land to move the fisher, then click water within ${CAST_RANGE_TILES} squares to cast and auto-catch fish.`}
       >
         <canvas
           aria-hidden="true"
           className="fishing-game__canvas"
-          height={manifest.pond.viewBox.height}
+          height={camera.viewportHeight}
           ref={canvasRef}
-          width={manifest.pond.viewBox.width}
+          width={camera.viewportWidth}
         />
         <div className="fishing-game__hotspots" aria-hidden="true">
           {manifest.pond.shoreline.map((tile) => {
-            const center = projectTile(tile, manifest.pond.tile, manifest.pond.origin);
-            const isReserved = isTileInsideReservedZone(manifest, tile, "land");
+            const center = projectSceneTile(tile);
+            const isReserved = tileIsReserved(tile, "land");
 
             return (
               <button
@@ -896,10 +1094,10 @@ export default function FishingGameShell({
                 onClick={() => !isReserved && handleMoveToLand(tile)}
                 style={
                   {
-                    "--hotspot-left": `${(center.x / manifest.pond.viewBox.width) * 100}%`,
-                    "--hotspot-top": `${(center.y / manifest.pond.viewBox.height) * 100}%`,
-                    "--hotspot-width": `${(manifest.pond.tile.width / manifest.pond.viewBox.width) * 100}%`,
-                    "--hotspot-height": `${(manifest.pond.tile.height / manifest.pond.viewBox.height) * 100}%`,
+                    "--hotspot-left": `${center.x}px`,
+                    "--hotspot-top": `${center.y}px`,
+                    "--hotspot-width": `${camera.tileSize.width}px`,
+                    "--hotspot-height": `${camera.tileSize.height}px`,
                   } as CSSProperties
                 }
                 tabIndex={-1}
@@ -908,8 +1106,8 @@ export default function FishingGameShell({
             );
           })}
           {waterTiles.map((tile) => {
-            const center = projectTile(tile, manifest.pond.tile, manifest.pond.origin);
-            const isReserved = isTileInsideReservedZone(manifest, tile, "water");
+            const center = projectSceneTile(tile);
+            const isReserved = tileIsReserved(tile, "water");
 
             return (
               <button
@@ -931,10 +1129,10 @@ export default function FishingGameShell({
                 onPointerLeave={() => setHoveredWaterTile(undefined)}
                 style={
                   {
-                    "--hotspot-left": `${(center.x / manifest.pond.viewBox.width) * 100}%`,
-                    "--hotspot-top": `${(center.y / manifest.pond.viewBox.height) * 100}%`,
-                    "--hotspot-width": `${(manifest.pond.tile.width / manifest.pond.viewBox.width) * 100}%`,
-                    "--hotspot-height": `${(manifest.pond.tile.height / manifest.pond.viewBox.height) * 100}%`,
+                    "--hotspot-left": `${center.x}px`,
+                    "--hotspot-top": `${center.y}px`,
+                    "--hotspot-width": `${camera.tileSize.width}px`,
+                    "--hotspot-height": `${camera.tileSize.height}px`,
                   } as CSSProperties
                 }
                 tabIndex={-1}
@@ -967,6 +1165,24 @@ export default function FishingGameShell({
             {lastCatch && <span className="fishing-chip">Last catch {lastCatch.displayName}</span>}
           </div>
           <div className="fishing-game__actions">
+            <button
+              className="pond-button pond-button--compact"
+              data-testid="export-scene"
+              onClick={handleExportScenePng}
+              type="button"
+            >
+              Export PNG
+            </button>
+            <button
+              aria-controls="catch-rail"
+              aria-expanded={!isHudCollapsed}
+              className="pond-button pond-button--compact"
+              data-testid="toggle-hud"
+              onClick={() => setIsHudCollapsed((current) => !current)}
+              type="button"
+            >
+              {isHudCollapsed ? "Expand rail" : "Minimize rail"}
+            </button>
             <span className="fishing-status-pill">
               {gameState === "hooked"
                 ? "Hooked"
@@ -976,11 +1192,16 @@ export default function FishingGameShell({
                     ? "Waiting"
                     : isCreelFull
                       ? "Rail full"
-                      : "Roaming"}
+              : "Roaming"}
             </span>
           </div>
         </div>
-        <section className="fishing-game__rail" aria-label="Caught fish">
+        <section
+          className="fishing-game__rail"
+          aria-label="Caught fish"
+          hidden={isHudCollapsed}
+          id="catch-rail"
+        >
           {Array.from({ length: MAX_CREEL_SIZE }, (_, index) => {
             const catchItem = creel[index];
 

@@ -1,30 +1,36 @@
 import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 
+const noop = () => {};
+
 Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
   value: vi.fn(() => {
     const gradient = {
-      addColorStop: vi.fn(),
+      addColorStop: noop,
     };
 
     return {
-      arc: vi.fn(),
-      beginPath: vi.fn(),
-      clearRect: vi.fn(),
-      closePath: vi.fn(),
-      createLinearGradient: vi.fn(() => gradient),
-      fill: vi.fn(),
-      fillRect: vi.fn(),
-      lineTo: vi.fn(),
-      moveTo: vi.fn(),
-      quadraticCurveTo: vi.fn(),
-      restore: vi.fn(),
-      save: vi.fn(),
-      scale: vi.fn(),
-      stroke: vi.fn(),
-      strokeRect: vi.fn(),
-      translate: vi.fn(),
+      arc: noop,
+      beginPath: noop,
+      clearRect: noop,
+      closePath: noop,
+      createLinearGradient: () => gradient,
+      fill: noop,
+      fillRect: noop,
+      lineTo: noop,
+      moveTo: noop,
+      quadraticCurveTo: noop,
+      restore: noop,
+      save: noop,
+      scale: noop,
+      stroke: noop,
+      strokeRect: noop,
+      translate: noop,
       imageSmoothingEnabled: false,
     };
   }),
+});
+
+Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
+  value: vi.fn(() => "data:image/png;base64,debug-scene"),
 });

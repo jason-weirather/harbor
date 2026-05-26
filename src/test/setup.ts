@@ -30,7 +30,3 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
     };
   }),
 });
-
-Object.defineProperty(HTMLCanvasElement.prototype, "toDataURL", {
-  value: vi.fn(() => "data:image/png;base64,debug-scene"),
-});

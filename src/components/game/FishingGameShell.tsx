@@ -90,6 +90,15 @@ function isTileWithinCastRange(origin: Tile, target: Tile, range = CAST_RANGE_TI
   return getTileRangeDistance(origin, target) <= range;
 }
 
+function getTileKey(tile: Tile) {
+  return `${tile.row}:${tile.col}`;
+}
+
+function getDeterministicNoise(a: number, b: number, seed = 0) {
+  const value = Math.sin((a + seed * 17.13) * 127.1 + (b - seed * 5.7) * 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function getStatusHeading(
   gameState: GameMode,
   targetTile: Tile | undefined,
@@ -148,13 +157,31 @@ function buildBackdropTiles(): BackdropTile[] {
   return tiles;
 }
 
+function buildNearShoreWaterKeys(waterTiles: Tile[], shoreline: ShoreTile[]) {
+  const keys = new Set<string>();
+
+  for (const waterTile of waterTiles) {
+    for (const shoreTile of shoreline) {
+      if (
+        Math.abs(waterTile.row - shoreTile.row) <= 1 &&
+        Math.abs(waterTile.col - shoreTile.col) <= 1
+      ) {
+        keys.add(getTileKey(waterTile));
+        break;
+      }
+    }
+  }
+
+  return keys;
+}
+
 function getTileFill(terrain: BackdropTile["terrain"] | ShoreTile["terrain"], dock?: boolean) {
   if (terrain === "water") {
-    return "#57b8d4";
+    return "#4598b3";
   }
 
   if (terrain === "water-deep") {
-    return "#3d97b8";
+    return "#327791";
   }
 
   if (terrain === "sand") {
@@ -170,6 +197,23 @@ function getTileFill(terrain: BackdropTile["terrain"] | ShoreTile["terrain"], do
   }
 
   return "#99d15f";
+}
+
+function mixHex(base: string, tint: string, amount: number) {
+  const normalize = (value: string) => value.replace("#", "");
+  const source = normalize(base);
+  const target = normalize(tint);
+  const toRgb = (value: string) => ({
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  });
+  const from = toRgb(source);
+  const to = toRgb(target);
+  const blend = (start: number, end: number) =>
+    Math.round(start + (end - start) * Math.min(1, Math.max(0, amount)));
+
+  return `rgb(${blend(from.r, to.r)}, ${blend(from.g, to.g)}, ${blend(from.b, to.b)})`;
 }
 
 function getFisherPose(mode: GameMode, frame: number): FisherPose {
@@ -268,55 +312,182 @@ function drawPixelTree(ctx: CanvasRenderingContext2D, x: number, y: number, scal
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(scale, scale);
-  drawPixelRect(ctx, -3, 10, 6, 18, "#65412a");
-  drawPixelRect(ctx, -1, 6, 2, 5, "#89603f");
-  drawPixelRect(ctx, -14, 4, 28, 8, "#2d5d43");
-  drawPixelRect(ctx, -12, -2, 24, 8, "#36704d");
-  drawPixelRect(ctx, -10, -9, 20, 8, "#4a8d5b");
-  drawPixelRect(ctx, -7, -15, 14, 7, "#5da96a");
-  drawPixelRect(ctx, -3, -20, 6, 6, "#81ca7d");
+  drawPixelRect(ctx, -16, 32, 32, 4, "rgba(22,50,74,0.16)");
+  drawPixelRect(ctx, -6, 9, 12, 24, "#5c3824");
+  drawPixelRect(ctx, -2, 11, 4, 20, "#8c6142");
+  drawPixelRect(ctx, -22, 20, 44, 6, "#1f4636");
+  drawPixelRect(ctx, -18, 14, 40, 7, "#285442");
+  drawPixelRect(ctx, -20, 9, 34, 6, "#2f624a");
+  drawPixelRect(ctx, -14, 3, 32, 6, "#397255");
+  drawPixelRect(ctx, -16, -2, 24, 6, "#3d7e5d");
+  drawPixelRect(ctx, -11, -7, 20, 6, "#4f926a");
+  drawPixelRect(ctx, -8, -12, 14, 5, "#63a97a");
+  drawPixelRect(ctx, -4, -17, 8, 4, "#8fc89b");
+  drawPixelRect(ctx, -18, 16, 5, 3, "#5ca86c");
+  drawPixelRect(ctx, -10, 7, 4, 3, "#73bc80");
+  drawPixelRect(ctx, 5, 1, 4, 3, "#84c990");
+  drawPixelRect(ctx, 9, 13, 5, 3, "#20493a");
+  drawPixelRect(ctx, -15, 11, 4, 2, "#244d3d");
   ctx.restore();
 }
 
-function drawPixelBush(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  drawPixelRect(ctx, x - 8, y + 1, 16, 6, "#4f934f");
-  drawPixelRect(ctx, x - 5, y - 3, 12, 6, "#63ad5c");
-  drawPixelRect(ctx, x - 2, y - 6, 7, 4, "#78bf6a");
+function drawPixelBush(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -11, 6, 22, 3, "rgba(22,50,74,0.14)");
+  drawPixelRect(ctx, -11, 2, 22, 7, "#4f934f");
+  drawPixelRect(ctx, -8, -4, 18, 7, "#63ad5c");
+  drawPixelRect(ctx, -3, -9, 10, 6, "#78bf6a");
+  drawPixelRect(ctx, -8, -1, 3, 3, "#8bd97d");
+  drawPixelRect(ctx, 4, -2, 3, 2, "#9be28b");
+  ctx.restore();
 }
 
-function drawPixelRock(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  drawPixelRect(ctx, x - 8, y + 3, 16, 6, "#8eaab3");
-  drawPixelRect(ctx, x - 5, y, 11, 5, "#c6d7dd");
+function drawPixelRock(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -22, 11, 44, 4, "rgba(22,50,74,0.14)");
+  drawPixelRect(ctx, -20, 7, 36, 10, "#6f8792");
+  drawPixelRect(ctx, -14, 2, 28, 10, "#92a9b2");
+  drawPixelRect(ctx, -8, -2, 17, 7, "#dbe7eb");
+  drawPixelRect(ctx, -15, 9, 5, 2, "#5c7179");
+  drawPixelRect(ctx, 6, 5, 4, 2, "#f4fbfd");
+  drawPixelRect(ctx, -2, 4, 6, 2, "#c7d4d9");
+  ctx.restore();
 }
 
-function drawPixelReeds(ctx: CanvasRenderingContext2D, x: number, y: number, frame: number) {
+function drawPixelReeds(ctx: CanvasRenderingContext2D, x: number, y: number, frame: number, scale = 1) {
   const sway = frame % 3;
-  drawPixelRect(ctx, x - 4, y - 8, 1, 10, "#6ba04d");
-  drawPixelRect(ctx, x, y - 11 + sway, 1, 13, "#7db65c");
-  drawPixelRect(ctx, x + 4, y - 9, 1, 11, "#83bf62");
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -11, 2, 22, 3, "rgba(22,50,74,0.1)");
+  drawPixelRect(ctx, -9, -15, 2, 17, "#5f9347");
+  drawPixelRect(ctx, -5, -20 + sway, 2, 22, "#6fac54");
+  drawPixelRect(ctx, -1, -22, 2, 24, "#84c164");
+  drawPixelRect(ctx, 3, -19 + sway, 2, 21, "#95cf72");
+  drawPixelRect(ctx, 7, -15, 2, 17, "#6ba04d");
+  drawPixelRect(ctx, -12, -10 + sway, 2, 13, "#4d7f3d");
+  drawPixelRect(ctx, 10, -13, 2, 16, "#4d7f3d");
+  drawPixelRect(ctx, -8, -8, 1, 3, "#b8dc95");
+  drawPixelRect(ctx, 2, -11, 1, 4, "#b8dc95");
+  drawPixelRect(ctx, -5, -18, 2, 2, "#9e7a42");
+  drawPixelRect(ctx, 3, -17 + sway, 2, 2, "#9e7a42");
+  ctx.restore();
 }
 
-function drawPixelDock(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  drawPixelRect(ctx, x - 16, y - 2, 28, 6, "#8a5634");
-  drawPixelRect(ctx, x - 10, y - 8, 22, 4, "#b57b4c");
-  drawPixelRect(ctx, x - 14, y - 8, 3, 16, "#6d4a31");
-  drawPixelRect(ctx, x + 8, y - 4, 3, 16, "#6d4a31");
+function drawPixelCattails(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  frame: number,
+  scale = 1,
+) {
+  const sway = frame % 4;
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -15, 5, 30, 4, "rgba(22,50,74,0.12)");
+  drawPixelRect(ctx, -11, -22, 2, 28, "#507d3e");
+  drawPixelRect(ctx, -5, -30 + sway, 2, 36, "#699b52");
+  drawPixelRect(ctx, 0, -34, 2, 40, "#79ad5b");
+  drawPixelRect(ctx, 5, -28 + sway, 2, 34, "#8fbe68");
+  drawPixelRect(ctx, 10, -20, 2, 26, "#5a8a43");
+  drawPixelRect(ctx, -13, -11, 4, 13, "#7e542e");
+  drawPixelRect(ctx, 3, -18 + sway, 4, 14, "#8c6036");
+  drawPixelRect(ctx, -9, -28, 2, 8, "#a8d785");
+  drawPixelRect(ctx, 6, -26, 2, 7, "#b9e396");
+  ctx.restore();
+}
+
+function drawPixelDock(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(scale, scale);
+  drawPixelRect(ctx, -32, 11, 64, 5, "rgba(22,50,74,0.16)");
+  drawPixelRect(ctx, -30, -3, 56, 9, "#7e4f31");
+  drawPixelRect(ctx, -21, -14, 41, 7, "#b78052");
+  drawPixelRect(ctx, -30, -14, 5, 31, "#6c472d");
+  drawPixelRect(ctx, 21, -10, 5, 27, "#6c472d");
+  drawPixelRect(ctx, -11, -13, 3, 16, "#d9a173");
+  drawPixelRect(ctx, 3, -13, 3, 16, "#d9a173");
+  drawPixelRect(ctx, -9, -14, 29, 3, "#e7b184");
+  drawPixelRect(ctx, -8, -7, 31, 4, "#6f482d");
+  drawPixelRect(ctx, 13, -7, 4, 16, "#5d3925");
+  drawPixelRect(ctx, -22, 0, 10, 3, "#945f3b");
+  drawPixelRect(ctx, -18, -8, 2, 12, "#d09b6d");
+  ctx.restore();
+}
+
+function drawGroundTileDetails(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  terrain: BackdropTile["terrain"] | ShoreTile["terrain"],
+  variant: number,
+  detailScale: number,
+) {
+  const pixel = Math.max(1, Math.round(detailScale * 0.45));
+  const bit = (
+    dx: number,
+    dy: number,
+    width: number,
+    height: number,
+    color: string,
+  ) => {
+    drawPixelRect(ctx, x + dx * pixel, y + dy * pixel, width * pixel, height * pixel, color);
+  };
+
+  if (terrain === "sand") {
+    const shadow = variant % 2 === 0 ? "rgba(176, 143, 84, 0.24)" : "rgba(196, 168, 109, 0.22)";
+    const sparkle = "rgba(250, 239, 184, 0.34)";
+    bit(-9, -2, 2, 1, shadow);
+    bit(-2, 4, 2, 1, shadow);
+    bit(6, -1, 2, 1, shadow);
+    bit(2, 6, 1, 1, shadow);
+    bit(-5, -6, 1, 1, sparkle);
+    bit(8, 4, 1, 1, sparkle);
+    return;
+  }
+
+  if (terrain === "path") {
+    bit(-10, -4, 3, 1, "rgba(177, 123, 66, 0.24)");
+    bit(5, -1, 2, 1, "rgba(177, 123, 66, 0.22)");
+    bit(-3, 5, 3, 1, "rgba(214, 191, 139, 0.3)");
+    bit(1, 7, 2, 1, "rgba(145, 103, 56, 0.2)");
+    return;
+  }
+
+  if (terrain === "grass") {
+    bit(-8, 2, 2, 3, "rgba(85, 137, 64, 0.32)");
+    bit(-1, -4, 1, 3, "rgba(123, 194, 98, 0.35)");
+    bit(4, 2, 2, 2, "rgba(72, 118, 58, 0.26)");
+    bit(8, -2, 1, 3, "rgba(134, 208, 110, 0.34)");
+    bit(-4, 6, 1, 2, "rgba(72, 118, 58, 0.24)");
+    bit(5, -6, 1, 2, "rgba(152, 220, 120, 0.28)");
+  }
 }
 
 function drawWaterTileDetails(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  frame: number,
+  time: number,
   variant: number,
   detailScale: number,
   deep = false,
 ) {
-  const shimmer = (frame + variant) % 6;
-  const foam = deep ? "rgba(185, 235, 248, 0.56)" : "rgba(225, 252, 255, 0.82)";
-  const shadow = deep ? "rgba(22, 87, 117, 0.42)" : "rgba(41, 113, 141, 0.28)";
-  const glow = deep ? "#6fd1ec" : "#a9eff8";
-  const pixel = Math.max(1, Math.round(detailScale * 0.6));
+  const motion = time / 260;
+  const driftA = Math.sin(motion + variant * 0.45) * 2.2;
+  const driftB = Math.cos(motion * 0.84 + variant * 0.31) * 1.9;
+  const driftC = Math.sin(motion * 1.18 + variant * 0.28) * 1.6;
+  const whiteCap = deep ? "rgba(223, 242, 247, 0.22)" : "rgba(233, 246, 250, 0.24)";
+  const foam = deep ? "rgba(112, 187, 205, 0.24)" : "rgba(126, 197, 214, 0.28)";
+  const shadow = deep ? "rgba(14, 68, 96, 0.3)" : "rgba(22, 82, 112, 0.28)";
+  const glow = deep ? "#67acc0" : "#70b4c7";
+  const pixel = Math.max(1, Math.round(detailScale * 0.74));
   const wave = (
     dx: number,
     dy: number,
@@ -327,26 +498,40 @@ function drawWaterTileDetails(
     drawPixelRect(ctx, x + dx * pixel, y + dy * pixel, width * pixel, height * pixel, color);
   };
 
-  wave(-12, -5, 4, 1, glow);
-  wave(-6, -7, 6, 1, foam);
-  wave(2, -5, 6, 1, foam);
-  wave(-10 + shimmer, -1, 5, 1, foam);
-  wave(-2 + shimmer, 1, 4, 1, glow);
-  wave(6 - shimmer, 0, 4, 1, foam);
-  wave(-8, 4, 5, 1, shadow);
-  wave(1 - shimmer, 5, 4, 1, shadow);
-  wave(7, 3, 3, 1, glow);
-  wave(-3, 7, 6, 1, shadow);
+  wave(-14 + driftA, -7, 6, 1, glow);
+  wave(-8 + driftB, -8, 8, 1, whiteCap);
+  wave(3 + driftC, -6, 8, 1, foam);
+  wave(-13 + driftA, -1, 7, 1, foam);
+  wave(-3 + driftB, 1, 8, 1, glow);
+  wave(6 - driftC, 0, 6, 1, foam);
+  wave(-12 + driftB, 4, 8, 1, shadow);
+  wave(-1 - driftA, 6, 6, 1, shadow);
+  wave(7 + driftC, 3, 4, 1, glow);
+  wave(-6 + driftA, 8, 9, 1, shadow);
+  wave(-7 + driftC, -2, 3, 1, foam);
+  wave(2 - driftB, 4, 3, 1, foam);
+  wave(-12 + driftC, 2, 4, 1, foam);
+  wave(8 - driftA, 2, 4, 1, glow);
+  wave(-3 + driftB, -3, 3, 1, whiteCap);
+  wave(4 - driftC, -9, 4, 1, glow);
+  wave(-10 + driftB, -2, 4, 1, shadow);
+  wave(8 - driftC, -4, 4, 1, whiteCap);
+  wave(2 + driftA, 6, 3, 1, shadow);
+  wave(-6 - driftB, 6, 4, 1, glow);
+}
 
-  if (variant % 2 === 0) {
-    wave(-13, 2, 2, 1, foam);
-    wave(9, 2, 3, 1, glow);
-    wave(-1, -3, 2, 1, foam);
-  } else {
-    wave(-9, -2, 3, 1, shadow);
-    wave(10, -4, 3, 1, foam);
-    wave(2, 6, 2, 1, shadow);
-  }
+function drawShoreWash(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  detailScale: number,
+  variant: number,
+) {
+  const pixel = Math.max(1, Math.round(detailScale * 0.58));
+  const shift = variant % 2 === 0 ? 0 : 1;
+  drawPixelRect(ctx, x - (15 - shift) * pixel, y - 5 * pixel, 6 * pixel, pixel, "rgba(233, 251, 255, 0.82)");
+  drawPixelRect(ctx, x - (12 - shift) * pixel, y - 2 * pixel, 7 * pixel, pixel, "rgba(214, 246, 254, 0.78)");
+  drawPixelRect(ctx, x - (10 - shift) * pixel, y + pixel, 5 * pixel, pixel, "rgba(135, 205, 223, 0.45)");
 }
 
 function drawPixelFish(
@@ -357,19 +542,27 @@ function drawPixelFish(
   direction: 1 | -1,
   scale: number,
   frame: number,
+  shadowy = false,
 ) {
   const wag = frame % 2;
+  const bodyColor = shadowy ? mixHex(accent, "#15485c", 0.72) : accent;
+  const finColor = shadowy ? mixHex(accent, "#0d2f3f", 0.78) : accent;
+  const eyeColor = shadowy ? "rgba(203, 244, 255, 0.18)" : "#10243a";
+  const tailColor = shadowy ? mixHex(accent, "#103949", 0.84) : "#d3f7ff";
+  const highlight = shadowy ? "rgba(201, 243, 255, 0.08)" : "rgba(255,255,255,0.25)";
+  const shadow = shadowy ? "rgba(9, 29, 39, 0.18)" : "rgba(9, 29, 39, 0)";
 
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(direction * scale, scale);
-  drawPixelRect(ctx, -11, -3, 14, 6, accent);
-  drawPixelRect(ctx, -7, -6, 8, 3, accent);
-  drawPixelRect(ctx, -6, 3, 7, 3, accent);
-  drawPixelRect(ctx, 3, -4 - wag, 6, 8 + wag * 2, accent);
-  drawPixelRect(ctx, -9, -1, 2, 2, "#10243a");
-  drawPixelRect(ctx, -13, -1, 3, 2, "#d3f7ff");
-  drawPixelRect(ctx, -1, -1, 4, 1, "rgba(255,255,255,0.25)");
+  drawPixelRect(ctx, -11, 7, 14, 2, shadow);
+  drawPixelRect(ctx, -11, -3, 14, 6, bodyColor);
+  drawPixelRect(ctx, -7, -6, 8, 3, finColor);
+  drawPixelRect(ctx, -6, 3, 7, 3, finColor);
+  drawPixelRect(ctx, 3, -4 - wag, 6, 8 + wag * 2, bodyColor);
+  drawPixelRect(ctx, -9, -1, 2, 2, eyeColor);
+  drawPixelRect(ctx, -13, -1, 3, 2, tailColor);
+  drawPixelRect(ctx, -1, -1, 4, 1, highlight);
   ctx.restore();
 }
 
@@ -399,22 +592,30 @@ function drawPixelFisher(
   scale = 1,
 ) {
   const pose = getFisherPose(mode, frame);
-  const bodyColor = "#cb5d43";
+  const coatColor = "#c65c43";
+  const coatShadow = "#8f4332";
   const hatColor = "#efc94e";
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(scale, scale);
-  drawPixelRect(ctx, -12, 18 + pose.bob, 24, 5, "rgba(22,50,74,0.22)");
-  drawPixelRect(ctx, -5, 7 + pose.bob, 3, 10, "#2b4158");
-  drawPixelRect(ctx, 2, 7 + pose.bob, 3, 10, "#2b4158");
-  drawPixelRect(ctx, -8, -1 + pose.bob, 16, 12, bodyColor);
-  drawPixelRect(ctx, -6, -11 + pose.bob, 12, 9, "#f5d3a4");
+  drawPixelRect(ctx, -13, 20 + pose.bob, 26, 5, "rgba(22,50,74,0.22)");
+  drawPixelRect(ctx, -6, 7 + pose.bob, 4, 11, "#2b4158");
+  drawPixelRect(ctx, 2, 7 + pose.bob, 4, 11, "#2b4158");
+  drawPixelRect(ctx, -9, -1 + pose.bob, 18, 13, coatColor);
+  drawPixelRect(ctx, 3, -1 + pose.bob, 4, 13, coatShadow);
+  drawPixelRect(ctx, -7, -12 + pose.bob, 14, 10, "#f3d2ac");
   drawPixelRect(ctx, -10, -16 + pose.bob, 20, 4, hatColor);
-  drawPixelRect(ctx, -4, -20 + pose.bob, 10, 4, hatColor);
-  drawPixelRect(ctx, -10, 15 + pose.bob, 6, 4, "#5a3d2b");
-  drawPixelRect(ctx, 4, 15 + pose.bob, 6, 4, "#5a3d2b");
+  drawPixelRect(ctx, -5, -21 + pose.bob, 11, 5, hatColor);
+  drawPixelRect(ctx, -10, 16 + pose.bob, 6, 4, "#5a3d2b");
+  drawPixelRect(ctx, 4, 16 + pose.bob, 6, 4, "#5a3d2b");
+  drawPixelRect(ctx, -2, 3 + pose.bob, 4, 2, "#f0b88e");
+  drawPixelRect(ctx, 5, 3 + pose.bob, 2, 2, "#f0b88e");
+  drawPixelRect(ctx, -4, -8 + pose.bob, 2, 2, "#805433");
+  drawPixelRect(ctx, 1, -8 + pose.bob, 2, 2, "#805433");
+  drawPixelRect(ctx, -2, -4 + pose.bob, 4, 1, "#d68b6e");
+  drawPixelRect(ctx, -2, 1 + pose.bob, 4, 1, "#f6e2be");
   ctx.strokeStyle = "#244a67";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.4;
   ctx.beginPath();
   ctx.moveTo(Math.round(6), Math.round(2 - pose.armLift + pose.bob));
   ctx.lineTo(Math.round(16), Math.round(-7 - pose.armLift + pose.bob));
@@ -453,6 +654,10 @@ export default function FishingGameShell({
     [defaultPlayerTile, manifest.pond.shoreline],
   );
   const backdropTiles = useMemo(() => buildBackdropTiles(), []);
+  const nearShoreWaterKeys = useMemo(
+    () => buildNearShoreWaterKeys(waterTiles, manifest.pond.shoreline),
+    [manifest.pond.shoreline, waterTiles],
+  );
   const ambientFish = useMemo<AmbientFish[]>(
     () => [
       {
@@ -588,11 +793,14 @@ export default function FishingGameShell({
       ? selectedWaterTile
       : activeWaterInRange;
   const playerCenter = projectSceneTile(playerTile);
-  const dockCenter = projectSceneTile({ row: 3, col: 10 });
   const upperTreeCenter = projectSceneTile({ row: 3, col: 12 });
   const ridgeTreeCenter = projectSceneTile({ row: 5, col: 13 });
   const lowerTreeCenter = projectSceneTile({ row: 6, col: 14 });
   const edgeTreeCenter = projectSceneTile({ row: 7, col: 14 });
+  const foothillTreeCenter = projectSceneTile({ row: 10, col: 15 });
+  const cattailCenterA = projectSceneTile({ row: 2, col: 7 });
+  const cattailCenterB = projectSceneTile({ row: 3, col: 8 });
+  const cattailCenterC = projectSceneTile({ row: 4, col: 9 });
   const bushCenter = projectSceneTile({ row: 9, col: 13 });
   const lowerBushCenter = projectSceneTile({ row: 12, col: 13 });
   const shoreRockCenter = projectSceneTile({ row: 4, col: 12 });
@@ -691,6 +899,9 @@ export default function FishingGameShell({
       const fisherScale = Math.max(1.6, Math.min(2.35, detailScale * 0.43));
       const treeScale = Math.max(1.7, Math.min(2.75, detailScale * 0.5));
       const fishScaleBoost = Math.max(1.35, Math.min(2.1, detailScale * 0.32));
+      const bushScale = Math.max(1.08, Math.min(1.44, detailScale * 0.24));
+      const reedsScale = Math.max(1.72, Math.min(2.45, detailScale * 0.4));
+      const rockScale = Math.max(1.15, Math.min(1.65, detailScale * 0.28));
       const fisherY = playerCenter.y - 8;
       const rodTip = getRodTipPosition(playerCenter.x, fisherY, gameState, frame, fisherScale);
       ctx.clearRect(0, 0, camera.viewportWidth, camera.viewportHeight);
@@ -710,6 +921,9 @@ export default function FishingGameShell({
           getTileFill(tile.terrain),
           tile.terrain.startsWith("water") ? "#2c7e9d" : "#6d8a50",
         );
+        if (!tile.terrain.startsWith("water")) {
+          drawGroundTileDetails(ctx, center.x, center.y, tile.terrain, tile.row + tile.col, detailScale);
+        }
       }
 
       for (const tile of waterTiles) {
@@ -718,14 +932,51 @@ export default function FishingGameShell({
         const isSelected = tileMatches(tile, selectedWaterTile);
         const isInRange = isTileWithinCastRange(playerTile, tile);
         const isDeep = tile.row + tile.col > 10;
+        const isNearShore = nearShoreWaterKeys.has(getTileKey(tile));
+        const macroPatchA = getDeterministicNoise(
+          Math.floor((tile.row + 2) / 4),
+          Math.floor((tile.col - 1) / 5),
+          1,
+        );
+        const macroPatchB = getDeterministicNoise(
+          Math.floor((tile.row - 3) / 6),
+          Math.floor((tile.col + 4) / 4),
+          2,
+        );
+        const speckle = getDeterministicNoise(tile.row, tile.col, 3);
+        const tileCluster = getDeterministicNoise(
+          Math.floor(tile.row / 2),
+          Math.floor(tile.col / 2),
+          7,
+        );
+        const patchBlend = macroPatchA * 0.62 + macroPatchB * 0.38;
+        const darkPool =
+          patchBlend > 0.58
+            ? 0.28
+            : patchBlend > 0.5
+              ? 0.18
+              : patchBlend > 0.42
+                ? 0.09
+                : 0.03;
+        const clusterShadow = tileCluster > 0.68 ? 0.12 : tileCluster > 0.52 ? 0.06 : 0;
+        const darkPocket = speckle > 0.76 ? 0.028 : speckle > 0.58 ? 0.012 : 0;
+        const nearShoreLift = isNearShore ? 0.004 : 0;
+        let underFill = "#236983";
+        let surfaceFill = "#3f8ea8";
+        underFill = mixHex(underFill, "#194f63", 0.16);
+        surfaceFill = mixHex(surfaceFill, "#275f75", 0.15);
+        underFill = mixHex(underFill, "#143a49", darkPool + clusterShadow + darkPocket * 0.9);
+        surfaceFill = mixHex(surfaceFill, "#1a4759", darkPool + clusterShadow + darkPocket);
+        underFill = mixHex(underFill, "#4ea7bc", nearShoreLift * 0.15);
+        surfaceFill = mixHex(surfaceFill, "#58b0c5", nearShoreLift * 0.12);
         drawDiamond(
           ctx,
           center.x,
           center.y + 2,
           halfWidth,
           halfHeight,
-          isDeep ? "#2a7c9b" : "#2f88a8",
-          "#256980",
+          underFill,
+          "rgba(37,105,128,0.38)",
           true,
         );
         drawDiamond(
@@ -734,29 +985,33 @@ export default function FishingGameShell({
           center.y,
           halfWidth,
           halfHeight,
-          tile.row % 2 === 0 ? "#56bad7" : "#469fbe",
+          surfaceFill,
           isSelected
             ? "#ff8b34"
             : isHovered
               ? isInRange
                 ? "#f6f0a2"
                 : "#ef4444"
-              : "#2b7c95",
+              : "rgba(43,124,149,0.34)",
         );
         drawWaterTileDetails(
           ctx,
           center.x,
           center.y,
-          frame,
+          time,
           tile.row + tile.col,
           detailScale,
           isDeep,
         );
+        if (isNearShore) {
+          drawShoreWash(ctx, center.x, center.y, detailScale, tile.row + tile.col);
+        }
       }
 
       for (const tile of manifest.pond.shoreline) {
         const center = projectSceneTile(tile);
         const isPlayer = tileMatches(tile, playerTile);
+        const shoreTerrain = tile.dock ? "path" : tile.terrain;
 
         drawDiamond(
           ctx,
@@ -764,8 +1019,8 @@ export default function FishingGameShell({
           center.y + 2,
           halfWidth,
           halfHeight,
-          tile.dock ? "#6f442a" : "#668848",
-          tile.dock ? "#53321f" : "#54723b",
+          shoreTerrain === "path" ? "#bfa36e" : "#668848",
+          shoreTerrain === "path" ? "#90784d" : "#54723b",
           true,
         );
         drawDiamond(
@@ -774,22 +1029,23 @@ export default function FishingGameShell({
           center.y,
           halfWidth,
           halfHeight,
-          getTileFill(tile.terrain, tile.dock),
+          getTileFill(shoreTerrain),
           isPlayer ? "#17324a" : "#6e8252",
         );
+        drawGroundTileDetails(ctx, center.x, center.y, shoreTerrain, tile.row + tile.col, detailScale);
       }
 
-      drawPixelDock(ctx, dockCenter.x + 8, dockCenter.y + 3);
-      drawPixelTree(ctx, upperTreeCenter.x + 10, upperTreeCenter.y - 38, treeScale * 1.1);
-      drawPixelTree(ctx, ridgeTreeCenter.x + 10, ridgeTreeCenter.y - 32, treeScale * 1.02);
-      drawPixelTree(ctx, lowerTreeCenter.x + 8, lowerTreeCenter.y - 28, treeScale * 0.95);
-      drawPixelTree(ctx, edgeTreeCenter.x + 10, edgeTreeCenter.y - 26, treeScale * 0.88);
-      drawPixelBush(ctx, bushCenter.x + 6, bushCenter.y - 8);
-      drawPixelBush(ctx, lowerBushCenter.x + 2, lowerBushCenter.y - 4);
-      drawPixelRock(ctx, shoreRockCenter.x + 14, shoreRockCenter.y - 2);
-      drawPixelReeds(ctx, dockCenter.x - 28, dockCenter.y + 24, frame);
-      drawPixelReeds(ctx, dockCenter.x - 18, dockCenter.y + 34, frame + 1);
-      drawPixelReeds(ctx, dockCenter.x - 7, dockCenter.y + 40, frame + 2);
+      drawPixelTree(ctx, upperTreeCenter.x + 11, upperTreeCenter.y - 42, treeScale * 1.18);
+      drawPixelTree(ctx, ridgeTreeCenter.x + 12, ridgeTreeCenter.y - 34, treeScale * 1.08);
+      drawPixelTree(ctx, lowerTreeCenter.x + 8, lowerTreeCenter.y - 30, treeScale);
+      drawPixelTree(ctx, edgeTreeCenter.x + 10, edgeTreeCenter.y - 28, treeScale * 0.94);
+      drawPixelTree(ctx, foothillTreeCenter.x + 8, foothillTreeCenter.y - 24, treeScale * 0.9);
+      drawPixelBush(ctx, bushCenter.x + 8, bushCenter.y - 10, bushScale);
+      drawPixelBush(ctx, lowerBushCenter.x + 4, lowerBushCenter.y - 6, bushScale * 0.96);
+      drawPixelRock(ctx, shoreRockCenter.x + 14, shoreRockCenter.y - 3, rockScale);
+      drawPixelCattails(ctx, cattailCenterA.x - 8, cattailCenterA.y + 10, frame, reedsScale * 0.88);
+      drawPixelCattails(ctx, cattailCenterB.x - 6, cattailCenterB.y + 11, frame + 1, reedsScale * 0.94);
+      drawPixelCattails(ctx, cattailCenterC.x - 4, cattailCenterC.y + 12, frame + 2, reedsScale);
 
       for (const fish of ambientFish) {
         const center = projectSceneTile(fish.tile);
@@ -803,6 +1059,7 @@ export default function FishingGameShell({
           fish.direction,
           fish.size * fishScaleBoost,
           frame,
+          true,
         );
       }
 
@@ -886,11 +1143,15 @@ export default function FishingGameShell({
     ambientFish,
     backdropTiles,
     camera,
-    dockCenter,
     gameState,
     hoveredWaterTile,
     manifest,
+    cattailCenterA,
+    cattailCenterB,
+    cattailCenterC,
+    nearShoreWaterKeys,
     lowerTreeCenter,
+    foothillTreeCenter,
     playerCenter,
     playerTile,
     ridgeTreeCenter,
@@ -1045,24 +1306,6 @@ export default function FishingGameShell({
     );
   }
 
-  function handleExportScenePng() {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const imageUrl = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-
-    link.href = imageUrl;
-    link.download = `clubhouse-pond-scene-${canvas.width}x${canvas.height}.png`;
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }
-
   return (
     <section
       className={`fishing-game${isHudCollapsed ? " is-hud-collapsed" : ""}`}
@@ -1165,14 +1408,6 @@ export default function FishingGameShell({
             {lastCatch && <span className="fishing-chip">Last catch {lastCatch.displayName}</span>}
           </div>
           <div className="fishing-game__actions">
-            <button
-              className="pond-button pond-button--compact"
-              data-testid="export-scene"
-              onClick={handleExportScenePng}
-              type="button"
-            >
-              Export PNG
-            </button>
             <button
               aria-controls="catch-rail"
               aria-expanded={!isHudCollapsed}

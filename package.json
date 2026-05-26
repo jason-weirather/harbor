@@ -9,6 +9,7 @@
     "prebuild": "node scripts/generate-pond-manifest.mjs",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "scene:capture": "node scripts/capture-pond-scene.mjs",
     "pond:build": "node scripts/generate-pond-manifest.mjs",
     "pretest": "node scripts/generate-pond-manifest.mjs",
     "test": "vitest run",

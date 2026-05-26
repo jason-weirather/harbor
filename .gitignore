@@ -3,3 +3,6 @@ dist
 .astro
 coverage
 
+.DS_Store
+
+tmp/

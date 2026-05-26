@@ -127,18 +127,4 @@ describe("FishingGameShell", () => {
     expect(screen.getByRole("button", { name: /Expand rail/i })).toBeInTheDocument();
     expect(screen.getByText(/Stand 3:10/)).toBeInTheDocument();
   });
-
-  it("exports the visible scene canvas as a png", () => {
-    const toDataUrlSpy = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL");
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-
-    render(<FishingGameShell manifest={manifest} />);
-
-    fireEvent.click(screen.getByTestId("export-scene"));
-
-    expect(toDataUrlSpy).toHaveBeenCalledWith("image/png");
-    expect(clickSpy).toHaveBeenCalled();
-  });
 });

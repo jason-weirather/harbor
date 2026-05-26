@@ -36,10 +36,15 @@ Then open the local Astro dev server URL that appears in the terminal.
 
 ```bash
 npm run pond:build
+npm run scene:capture -- --width 1758 --height 1035 --out tmp/pond-scene.png
 npm run test
 npm run build
 npm run preview
 ```
+
+`npm run scene:capture` builds the site, starts a temporary local preview
+server, and saves a PNG of the visible game board only. This is the preferred
+debug path for visual iteration now that the in-UI export button is gone.
 
 ## Test examples
 

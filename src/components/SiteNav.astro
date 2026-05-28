@@ -9,7 +9,7 @@ const { variant = "default" } = Astro.props;
 const links = [
   { href: "/", label: "Home" },
   { href: "/posts/a-quiet-cast-into-harbor/", label: "Library" },
-  { href: "/rooms/pond/", label: "Pond Room" },
+  { href: "/rooms/pond/", label: "Pond Demo" },
   { href: "/artifacts/", label: "Artifacts" },
 ];
 ---
@@ -17,13 +17,13 @@ const links = [
 <nav class:list={["site-nav", variant === "world" && "site-nav--world"]} aria-label="Primary">
   <a class="site-nav__brand" href="/">
     <span class="site-nav__eyebrow">Harbor</span>
-    <strong>The Clubhouse Pond</strong>
+    <strong>Fishing Widget Demo</strong>
   </a>
   <p class="site-nav__intro">
     {
       variant === "world"
-        ? "Cute isometric shoreline first, authored writing layered gently on top, and durable artifact links underneath it all."
-        : "Static-first writing, playful rooms, and a small isometric fishing toy that reveals durable artifact links."
+        ? "A standalone fishing widget first, with reading links and host-friendly artifact surfaces layered around it."
+        : "A portable fishing widget with demo hosts, durable artifact links, and just enough page chrome to explain it."
     }
   </p>
   <div class="site-nav__links">
@@ -42,15 +42,15 @@ const links = [
     {
       variant === "world" ? (
         <>
-          <p>World rule</p>
-          <strong>The pond is the page</strong>
-          <span>Panels float above the world and block input beneath them.</span>
+          <p>Standalone mode</p>
+          <strong>The widget owns the page</strong>
+          <span>Panels float above the scene and keep interaction scoped to the demo.</span>
         </>
       ) : (
         <>
-          <p>Mask model</p>
-          <strong>0 / 1 / 2</strong>
-          <span>Scenery, playable pond, status row.</span>
+          <p>Widget modes</p>
+          <strong>standalone / embedded / background</strong>
+          <span>One widget surface, multiple host contexts.</span>
         </>
       )
     }

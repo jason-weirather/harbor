@@ -1,8 +1,8 @@
 import type {
-  ArtifactSummary,
   CatchInstance,
   FishTemplate,
   PondManifest,
+  PondArtifactRecord,
   SpawnEntry,
   Tile,
 } from "./types";
@@ -89,7 +89,7 @@ export function pickFish(
 }
 
 export function pickArtifact(
-  artifacts: ArtifactSummary[],
+  artifacts: PondArtifactRecord[],
   fish: FishTemplate,
   random: () => number,
 ) {
@@ -102,7 +102,7 @@ export function pickArtifact(
 }
 
 export function resolveCatch(
-  manifest: PondManifest,
+  manifest: PondManifest<PondArtifactRecord>,
   target: Tile,
   random: () => number,
   castNumber: number,

@@ -73,7 +73,14 @@ export interface FishTemplate {
   artifactChance: number;
 }
 
-export interface ArtifactSummary {
+export interface PondArtifactRecord {
+  id: string;
+  title: string;
+  summary?: string;
+  pointsBonus?: number;
+}
+
+export interface ArtifactSummary extends PondArtifactRecord {
   id: string;
   slug: string;
   title: string;
@@ -98,10 +105,10 @@ export interface SpawnTable {
   entries: SpawnEntry[];
 }
 
-export interface PondManifest {
+export interface PondManifest<TArtifact extends PondArtifactRecord = ArtifactSummary> {
   pond: PondDefinition;
   fish: FishTemplate[];
-  artifacts: ArtifactSummary[];
+  artifacts: TArtifact[];
   spawnTables: SpawnTable[];
   generatedAt: string;
 }

@@ -1,5 +1,5 @@
 ---
-import FishingGameShell from "../components/game/FishingGameShell";
+import HarborWidget from "../harbor/HarborWidget";
 import manifest from "../generated/pond-manifest.json";
 import "../styles/site.css";
 
@@ -10,7 +10,7 @@ interface Props {
 
 const {
   title,
-  description = "Harbor is a fishing-first prototype built on a static content base.",
+  description = "Harbor is a portable fishing widget with Astro acting as a demo host.",
 } = Astro.props;
 ---
 
@@ -26,6 +26,6 @@ const {
     <script is:inline>
       document.documentElement.dataset.js = "ready";
     </script>
-    <FishingGameShell client:load manifest={manifest} title={title} />
+    <HarborWidget client:load manifest={manifest} mode="standalone" title={title} />
   </body>
 </html>

@@ -1,0 +1,375 @@
+.harbor-widget {
+  --harbor-paper: #fff9ef;
+  --harbor-panel: rgba(255, 251, 242, 0.88);
+  --harbor-border: rgba(22, 50, 74, 0.12);
+  --harbor-ink: #16324a;
+  --harbor-ink-soft: #446276;
+  --harbor-pond: #1e90a7;
+  --harbor-pond-deep: #156477;
+  --harbor-sun: #f59e0b;
+  --harbor-shadow: 0 24px 56px rgba(22, 50, 74, 0.18);
+  --harbor-font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  --harbor-font-body: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  --harbor-panel-height: clamp(19rem, 33vh, 24rem);
+  --harbor-panel-height-collapsed: clamp(6rem, 9vh, 7rem);
+  color: var(--harbor-ink);
+  display: grid;
+  font-family: var(--harbor-font-body);
+  grid-template-rows: minmax(0, 1fr) var(--harbor-panel-height);
+  isolation: isolate;
+  min-width: 0;
+  width: 100%;
+}
+
+.harbor-widget--standalone {
+  height: 100vh;
+}
+
+.harbor-widget--embedded,
+.harbor-widget--background {
+  border: 1px solid var(--harbor-border);
+  border-radius: 1.5rem;
+  box-shadow: 0 18px 42px rgba(22, 50, 74, 0.08);
+  height: auto;
+  overflow: hidden;
+}
+
+.harbor-widget--embedded {
+  background: linear-gradient(180deg, #fffdf8 0%, #f7ecda 100%);
+}
+
+.harbor-widget--background {
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.harbor-widget.is-hud-collapsed {
+  grid-template-rows: minmax(0, 1fr) var(--harbor-panel-height-collapsed);
+}
+
+.harbor-widget__scene {
+  background: linear-gradient(180deg, #cfefff 0%, #7ecfdf 100%);
+  min-height: 0;
+  outline: none;
+  overflow: hidden;
+  position: relative;
+}
+
+.harbor-widget--embedded .harbor-widget__scene,
+.harbor-widget--background .harbor-widget__scene {
+  min-height: min(32rem, 68vh);
+}
+
+.harbor-widget__scene:focus-visible {
+  box-shadow: inset 0 0 0 4px rgba(21, 100, 119, 0.18);
+}
+
+.harbor-widget__canvas {
+  display: block;
+  height: 100%;
+  image-rendering: pixelated;
+  width: 100%;
+}
+
+.harbor-widget__hotspots {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.harbor-widget__hotspot {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  cursor: pointer;
+  height: var(--hotspot-height);
+  left: var(--hotspot-left);
+  opacity: 0;
+  pointer-events: auto;
+  position: absolute;
+  top: var(--hotspot-top);
+  transform: translate(-50%, -50%);
+  width: var(--hotspot-width);
+}
+
+.harbor-widget__panel {
+  backdrop-filter: blur(16px);
+  background: var(--harbor-panel);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: var(--harbor-shadow);
+  display: grid;
+  gap: 0.95rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.78rem 0.9rem 0.9rem;
+  position: relative;
+  z-index: 1;
+}
+
+.harbor-widget--embedded .harbor-widget__panel,
+.harbor-widget--background .harbor-widget__panel {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.harbor-widget__panel-top {
+  align-items: start;
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: minmax(16rem, 1.2fr) minmax(0, 1fr) auto;
+}
+
+.harbor-widget__summary {
+  display: grid;
+  gap: 0.18rem;
+  min-width: min(26rem, 100%);
+}
+
+.harbor-widget__summary strong,
+.harbor-widget__artifact-panel strong {
+  color: var(--harbor-ink);
+  font-size: 0.98rem;
+}
+
+.harbor-widget__summary span,
+.harbor-widget__artifact-panel span {
+  color: var(--harbor-ink-soft);
+  line-height: 1.45;
+}
+
+.harbor-widget__eyebrow,
+.harbor-widget__artifact-label {
+  color: var(--harbor-pond-deep);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.harbor-widget__meta,
+.harbor-widget__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.harbor-widget__meta {
+  align-content: flex-start;
+}
+
+.harbor-widget__actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.harbor-widget__artifact-panel {
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(22, 50, 74, 0.08);
+  border-radius: 1.15rem;
+  display: grid;
+  gap: 0.28rem;
+  grid-column: 1 / -1;
+  padding: 0.82rem 0.9rem;
+}
+
+.harbor-widget__artifact-action {
+  font-size: 0.92rem;
+  font-weight: 700;
+  justify-self: start;
+}
+
+.harbor-widget.is-hud-collapsed .harbor-widget__summary span,
+.harbor-widget.is-hud-collapsed .harbor-widget__artifact-panel {
+  display: none;
+}
+
+.harbor-widget.is-hud-collapsed .harbor-widget__panel {
+  gap: 0.6rem;
+  padding-bottom: 0.75rem;
+}
+
+.fishing-chip,
+.fishing-status-pill {
+  background: rgba(30, 144, 167, 0.1);
+  border-radius: 999px;
+  color: var(--harbor-ink);
+  font-size: 0.88rem;
+  padding: 0.5rem 0.74rem;
+}
+
+.fishing-status-pill {
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.harbor-widget__rail {
+  align-items: stretch;
+  display: grid;
+  gap: 0.7rem;
+  grid-auto-columns: minmax(16.5rem, 19rem);
+  grid-auto-flow: column;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 0.35rem;
+  padding-right: 0.2rem;
+  scroll-snap-type: x proximity;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.harbor-widget__rail[hidden] {
+  display: none;
+}
+
+.harbor-widget__rail-card {
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(22, 50, 74, 0.08);
+  border-radius: 1.15rem;
+  column-gap: 0.7rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  height: 100%;
+  min-height: 6.75rem;
+  padding: 0.66rem;
+  row-gap: 0.28rem;
+  scroll-snap-align: start;
+}
+
+.harbor-widget__rail-card.is-selected {
+  border-color: rgba(21, 100, 119, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(21, 100, 119, 0.14);
+}
+
+.harbor-widget__rail-card--empty {
+  align-items: center;
+  color: var(--harbor-ink-soft);
+  justify-items: center;
+  text-align: center;
+}
+
+.harbor-widget__rail-swatch {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.78), transparent 36%),
+    linear-gradient(135deg, var(--fish-accent), rgba(255, 255, 255, 0.16));
+  border-radius: 0.95rem;
+  box-shadow: inset 0 -8px 16px rgba(15, 23, 42, 0.12);
+  grid-row: 1 / span 2;
+  height: 2.6rem;
+  width: 2.6rem;
+}
+
+.harbor-widget__rail-copy {
+  display: grid;
+  gap: 0.15rem;
+  grid-column: 2;
+  grid-row: 1;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.harbor-widget__rail-copy strong {
+  color: var(--harbor-ink);
+}
+
+.harbor-widget__rail-copy span,
+.harbor-widget__rail-card--empty span {
+  color: var(--harbor-ink-soft);
+  font-size: 0.9rem;
+}
+
+.harbor-widget__rail-copy a {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.harbor-widget__rail-card > .pond-link-button {
+  align-self: end;
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.pond-button,
+.pond-link-button {
+  appearance: none;
+  background: #fffdf8;
+  border: 1px solid rgba(22, 50, 74, 0.12);
+  border-radius: 999px;
+  color: var(--harbor-ink);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.72rem 1rem;
+  text-decoration: none;
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.pond-button:not(:disabled):hover,
+.pond-link-button:hover {
+  border-color: rgba(21, 100, 119, 0.24);
+  transform: translateY(-1px);
+}
+
+.pond-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.pond-button--compact {
+  font-size: 0.84rem;
+  padding: 0.46rem 0.72rem;
+}
+
+.pond-link-button {
+  background: transparent;
+  justify-self: start;
+  padding: 0.1rem 0;
+}
+
+@media (max-width: 1080px) {
+  .harbor-widget__panel-top {
+    grid-template-columns: 1fr;
+  }
+
+  .harbor-widget__actions {
+    justify-content: flex-start;
+  }
+
+  .harbor-widget__rail {
+    grid-auto-columns: minmax(14.5rem, 16rem);
+  }
+}
+
+@media (max-width: 760px) {
+  .harbor-widget {
+    grid-template-rows: minmax(18rem, 1fr) auto;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .harbor-widget.is-hud-collapsed {
+    grid-template-rows: minmax(18rem, 1fr) auto;
+  }
+
+  .harbor-widget__panel {
+    gap: 0.75rem;
+    padding: 0.8rem 0.75rem 0.95rem;
+  }
+
+  .harbor-widget__rail {
+    grid-auto-columns: minmax(13.5rem, 15rem);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .harbor-widget__rail-card {
+    min-height: auto;
+  }
+}

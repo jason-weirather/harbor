@@ -11,7 +11,7 @@ import type {
   TileSize,
 } from "../lib/pond/types";
 import type { HarborArtifact } from "./HarborWidget.types";
-import type { AmbientFish, HarborGameMode, MovementPath } from "./harborWidget.shared";
+import type { AmbientEgret, AmbientFish, HarborGameMode, MovementPath } from "./harborWidget.shared";
 import {
   buildNearShoreWaterKeys,
   getTileKey,
@@ -24,9 +24,11 @@ import { buildBackdropTiles } from "./render/SceneLayers";
 
 interface FishingSceneProps {
   activeCatchPreview?: CatchInstance;
+  ambientEgret?: AmbientEgret;
   ambientFish: AmbientFish[];
   approachDirection: 1 | -1;
   approachStartedAt?: number;
+  castingStartedAt?: number;
   encounterFishScale: number;
   gameState: HarborGameMode;
   hoveredWaterTile?: Tile;
@@ -98,8 +100,10 @@ export default function FishingScene({
   hoveredWaterTile,
   gameState,
   activeCatchPreview,
+  ambientEgret,
   ambientFish,
   movement,
+  castingStartedAt,
   reelingStartedAt,
   reelDuration,
   approachStartedAt,
@@ -228,6 +232,7 @@ export default function FishingScene({
       : undefined;
   const sceneWaterTile =
     gameState === "waiting" ||
+    gameState === "casting" ||
     gameState === "hooked" ||
     gameState === "reeling" ||
     gameState === "inspecting"
@@ -251,11 +256,13 @@ export default function FishingScene({
     const draw = (time: number) => {
       drawCanvasHarborFrame(ctx, {
         activeCatchPreview,
+        ambientEgret,
         ambientFish,
         approachDirection,
         approachStartedAt,
         backdropTiles,
         camera,
+        castingStartedAt,
         encounterFishScale,
         gameState,
         hoveredWaterTile,
@@ -281,11 +288,13 @@ export default function FishingScene({
     return () => window.cancelAnimationFrame(rafId);
   }, [
     activeCatchPreview,
+    ambientEgret,
     ambientFish,
     approachDirection,
     approachStartedAt,
     backdropTiles,
     camera,
+    castingStartedAt,
     encounterFishScale,
     gameState,
     hoveredWaterTile,

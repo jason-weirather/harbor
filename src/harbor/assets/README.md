@@ -13,6 +13,8 @@ src/harbor/assets/
     harbor-tiles.json
     harbor-characters.png
     harbor-characters.json
+    harbor-wildlife.png
+    harbor-wildlife.json
     harbor-fish.png
     harbor-fish.json
     harbor-fx.png
@@ -37,6 +39,10 @@ prop.reeds.0
 fisher.idle.right.0
 fisher.cast.right.0
 fisher.reel.right.0
+wildlife.egret.fly.0
+wildlife.egret.stand.0
+wildlife.egret.strike.0
+wildlife.egret.eat.0
 fish.lanternKoi.swim.0
 fx.ripple.0
 fx.splash.0

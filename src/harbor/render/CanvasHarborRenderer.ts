@@ -1,10 +1,17 @@
 import { BITE_DELAY_MS } from "../../lib/pond/game";
 import type { ShoreTile, Tile } from "../../lib/pond/types";
 import {
+  CAST_ANIMATION_MS,
+  EGRET_ARRIVE_MS,
+  EGRET_EAT_MS,
+  EGRET_LEAVE_MS,
+  EGRET_STRIKE_MS,
   getMinimumTileDistance,
   getTileKey,
   isTileWithinCastRange,
   tileMatches,
+  type AmbientEgret,
+  type AmbientEgretState,
   type HarborGameMode,
 } from "../harborWidget.shared";
 import type { CanvasHarborFrame, ScenePoint } from "./HarborRenderer";
@@ -42,6 +49,14 @@ interface NamedSpriteOptions {
   frame: number;
   mode?: HarborGameMode;
   scale: number;
+}
+
+interface EgretRenderPose {
+  direction: 1 | -1;
+  mode: AmbientEgretState;
+  progress: number;
+  x: number;
+  y: number;
 }
 
 function getTileFill(terrain: BackdropTerrain | ShoreTile["terrain"], dock?: boolean) {
@@ -502,6 +517,110 @@ function drawPixelFish(
   ctx.restore();
 }
 
+function drawFishInBeak(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  accent: string,
+  scale = 1,
+) {
+  drawPixelRect(ctx, x, y, 7 * scale, 3 * scale, mixHex(accent, "#173f52", 0.18));
+  drawPixelRect(ctx, x + 5 * scale, y - scale, 3 * scale, 5 * scale, mixHex(accent, "#123646", 0.28));
+  drawPixelRect(ctx, x + scale, y + scale, 3 * scale, scale, "rgba(255,255,255,0.34)");
+}
+
+function drawPixelEgret(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  direction: 1 | -1,
+  state: AmbientEgretState,
+  progress: number,
+  frame: number,
+  scale = 1,
+  caughtFish?: AmbientEgret["caughtFish"],
+) {
+  const flying = state === "arriving" || state === "leaving";
+  const striking = state === "striking";
+  const eating = state === "eating";
+  const wingsUp = Math.floor(frame / 3) % 2 === 0;
+  const white = "#fffdf1";
+  const shade = "#d9e7e3";
+  const warmShade = "#f2ead2";
+  const bill = "#d8aa3a";
+  const leg = "#27333f";
+  const swallow = eating ? Math.min(1, progress / 0.62) : 0;
+
+  getSpriteFrame(
+    flying
+      ? "wildlife.egret.fly.0"
+      : striking
+        ? "wildlife.egret.strike.0"
+        : eating
+          ? "wildlife.egret.eat.0"
+          : "wildlife.egret.stand.0",
+  );
+
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(direction * scale, scale);
+  drawSoftOvalShadow(ctx, 0, 21, flying ? 34 : 24, flying ? 8 : 7, flying ? 0.08 : 0.18);
+
+  if (flying) {
+    const upperWingY = wingsUp ? -39 : -15;
+    const farWingY = wingsUp ? -12 : 12;
+    const farWingHeight = wingsUp ? 8 : 10;
+    drawPixelRect(ctx, -17, -9, 27, 10, white);
+    drawPixelRect(ctx, -12, -5, 20, 8, shade);
+    drawPixelRect(ctx, -4, upperWingY, 46, 10, white);
+    drawPixelRect(ctx, 18, upperWingY + (wingsUp ? 8 : 5), 24, 6, shade);
+    drawPixelRect(ctx, -40, farWingY, 36, farWingHeight, warmShade);
+    drawPixelRect(ctx, -34, farWingY + (wingsUp ? 6 : 8), 22, 6, shade);
+    drawPixelRect(ctx, 7, -13, 12, 5, white);
+    drawPixelRect(ctx, 16, -11, 15, 2, bill);
+    drawPixelRect(ctx, -23, 2, 16, 2, leg);
+    drawPixelRect(ctx, -21, 6, 14, 2, leg);
+    ctx.restore();
+    return;
+  }
+
+  drawPixelRect(ctx, -4, 4, 2, 22, leg);
+  drawPixelRect(ctx, 5, 4, 2, 22, leg);
+  drawPixelRect(ctx, -8, 24, 8, 2, leg);
+  drawPixelRect(ctx, 2, 24, 8, 2, leg);
+  drawPixelRect(ctx, -14, -9, 26, 14, white);
+  drawPixelRect(ctx, -8, -5, 18, 9, shade);
+  drawPixelRect(ctx, -17, -3, 9, 7, warmShade);
+
+  if (striking) {
+    const neckReach = 18 + progress * 12;
+    drawPixelRect(ctx, 7, -8, neckReach, 4, white);
+    drawPixelRect(ctx, 22 + progress * 12, -5 + progress * 8, 5, 14, white);
+    drawPixelRect(ctx, 25 + progress * 12, 7 + progress * 7, 9, 5, white);
+    drawPixelRect(ctx, 33 + progress * 12, 9 + progress * 7, 13, 3, bill);
+    if (caughtFish) {
+      drawFishInBeak(ctx, 44 + progress * 10, 9 + progress * 7, caughtFish.accent, 1);
+    }
+    ctx.restore();
+    return;
+  }
+
+  drawPixelRect(ctx, 6, -21, 5, 18, white);
+  drawPixelRect(ctx, 8, -28, 9, 6, white);
+  drawPixelRect(ctx, 15, -27, 12, 3, bill);
+  drawPixelRect(ctx, 14, -26, 2, 2, "#142333");
+
+  if (caughtFish && eating && swallow < 1) {
+    drawFishInBeak(ctx, 27 - swallow * 9, -26 + swallow * 12, caughtFish.accent, 1);
+  }
+
+  if (eating && progress > 0.58) {
+    drawPixelRect(ctx, 8, -18, 4, 3, "rgba(210, 230, 226, 0.72)");
+  }
+
+  ctx.restore();
+}
+
 function getFishNoseOffset(
   scale: number,
   direction: 1 | -1,
@@ -530,10 +649,14 @@ function drawPixelBobber(
   const bob = mode === "hooked" || mode === "reeling" ? frame % 2 : 0;
   drawPixelRect(ctx, x - 2, y - 4 - bob, 4, 4, mode === "hooked" ? "#ff7b2c" : "#fff1bc");
   drawPixelRect(ctx, x - 1, y - 7 - bob, 2, 3, "#0f172a");
+  if (mode === "casting") {
+    return;
+  }
+
   drawTargetRipples(ctx, x, y, frame, mode === "hooked" ? "bite" : "selected");
 }
 
-function getFisherPose(mode: HarborGameMode, motion: number): FisherPose {
+function getFisherPose(mode: HarborGameMode, motion: number, castingProgress = 1): FisherPose {
   if (mode === "walking") {
     const stride = Math.sin(motion * 1.9);
 
@@ -552,11 +675,20 @@ function getFisherPose(mode: HarborGameMode, motion: number): FisherPose {
 
   const idleWave = Math.sin(motion * 0.72);
   const patientWave = Math.sin(motion * 0.36 + 0.8);
+  const cast = easeInOut(clamp(castingProgress, 0, 1));
+  const castSnap = Math.sin(cast * Math.PI);
 
   return {
-    bob: mode === "inspecting" ? 0.6 : Math.max(0, idleWave) * 1.35,
+    bob:
+      mode === "casting"
+        ? castSnap * 1.5
+        : mode === "inspecting"
+          ? 0.6
+          : Math.max(0, idleWave) * 1.35,
     rodLift:
-      mode === "inspecting"
+      mode === "casting"
+        ? 16 - cast * 8 + castSnap * 3
+        : mode === "inspecting"
         ? 15
         : mode === "hooked"
           ? 8 + idleWave * 0.8
@@ -566,16 +698,31 @@ function getFisherPose(mode: HarborGameMode, motion: number): FisherPose {
               ? 4 + patientWave * 1.1
               : 3 + patientWave * 0.7,
     armLift:
-      mode === "inspecting"
+      mode === "casting"
+        ? 6.8 - cast * 2.4 + castSnap * 1.5
+        : mode === "inspecting"
         ? 6
         : mode === "reeling"
           ? 4 + idleWave * 0.6
           : mode === "hooked"
             ? 2.8 + patientWave * 0.5
             : 1 + patientWave * 0.5,
-    swayX: mode === "waiting" ? idleWave * 1.2 : patientWave * 0.65,
+    swayX:
+      mode === "casting"
+        ? lerp(-1.3, 1.15, cast) + castSnap * 0.55
+        : mode === "waiting"
+          ? idleWave * 1.2
+          : patientWave * 0.65,
     torsoLean:
-      mode === "reeling" ? 1.8 : mode === "hooked" ? 1.2 : mode === "waiting" ? 0.8 : 0.5,
+      mode === "casting"
+        ? lerp(-1.25, 1.35, cast)
+        : mode === "reeling"
+          ? 1.8
+          : mode === "hooked"
+            ? 1.2
+            : mode === "waiting"
+              ? 0.8
+              : 0.5,
     frontLegLift: 0,
     backLegLift: 0,
     frontStep: 0,
@@ -583,8 +730,13 @@ function getFisherPose(mode: HarborGameMode, motion: number): FisherPose {
   };
 }
 
-function getRodLocalGeometry(mode: HarborGameMode, motion: number, pull: number) {
-  const pose = getFisherPose(mode, motion);
+function getRodLocalGeometry(
+  mode: HarborGameMode,
+  motion: number,
+  pull: number,
+  castingProgress = 1,
+) {
+  const pose = getFisherPose(mode, motion, castingProgress);
   const handX = 7;
   const handY = 2 - pose.armLift * 0.35;
   const baseTipX = 31.1;
@@ -599,6 +751,25 @@ function getRodLocalGeometry(mode: HarborGameMode, motion: number, pull: number)
       bendY: undefined,
       tipX: baseTipX,
       tipY: baseTipY,
+    };
+  }
+
+  if (mode === "casting") {
+    const cast = easeInOut(clamp(castingProgress, 0, 1));
+    const castArc = Math.sin(cast * Math.PI);
+    const tipX = lerp(-13, baseTipX + 4.5, cast);
+    const tipY = lerp(-18, baseTipY + 0.8, cast) - castArc * 27;
+    const bendX = lerp(-3, baseTipX - 6, cast);
+    const bendY = lerp(-7, baseTipY - 2, cast) - castArc * 12;
+
+    return {
+      pose,
+      handX,
+      handY,
+      bendX,
+      bendY,
+      tipX,
+      tipY,
     };
   }
 
@@ -646,8 +817,9 @@ function getRodTipPosition(
   motion: number,
   scale = 1,
   pull = 0,
+  castingProgress = 1,
 ) {
-  const rod = getRodLocalGeometry(mode, motion, pull);
+  const rod = getRodLocalGeometry(mode, motion, pull, castingProgress);
   const translatedX = x + rod.pose.swayX * scale;
   const translatedY = y - 22 * scale + rod.pose.bob * scale;
 
@@ -665,15 +837,16 @@ function drawPixelFisher(
   motion: number,
   scale = 1,
   pull = 0,
+  castingProgress = 1,
 ) {
   getSpriteFrame(
     mode === "reeling" || mode === "hooked"
       ? "fisher.reel.right.0"
-      : mode === "waiting"
+      : mode === "waiting" || mode === "casting"
         ? "fisher.cast.right.0"
         : "fisher.idle.right.0",
   );
-  const rod = getRodLocalGeometry(mode, motion, pull);
+  const rod = getRodLocalGeometry(mode, motion, pull, castingProgress);
   const pose = rod.pose;
   const coatColor = "#c7664e";
   const coatShadow = "#954735";
@@ -1032,6 +1205,75 @@ function getAnimatedPlayerCenter(frame: CanvasHarborFrame, time: number): {
   return { center, mode };
 }
 
+function getEgretPose(egret: AmbientEgret, frame: CanvasHarborFrame): EgretRenderPose {
+  const perchCenter = frame.projectSceneTile(egret.perchTile);
+  const targetCenter = frame.projectSceneTile(egret.targetWaterTile);
+  const waterDirection = targetCenter.x >= perchCenter.x ? 1 : -1;
+  const perchPoint = {
+    x: perchCenter.x,
+    y: perchCenter.y - frame.camera.tileSize.height * 0.18,
+  };
+  const elapsed = Math.max(0, frame.time - egret.stateStartedAt);
+
+  if (egret.state === "arriving") {
+    const progress = easeInOut(clamp(elapsed / EGRET_ARRIVE_MS, 0, 1));
+    const startX = waterDirection === 1 ? -96 : frame.camera.viewportWidth + 96;
+    const startY = perchPoint.y - 145;
+
+    return {
+      direction: waterDirection,
+      mode: egret.state,
+      progress,
+      x: lerp(startX, perchPoint.x - waterDirection * 8, progress),
+      y: lerp(startY, perchPoint.y, progress) + Math.sin(progress * Math.PI) * -18,
+    };
+  }
+
+  if (egret.state === "striking") {
+    const progress = easeInOut(clamp(elapsed / EGRET_STRIKE_MS, 0, 1));
+
+    return {
+      direction: waterDirection,
+      mode: egret.state,
+      progress,
+      x: lerp(perchPoint.x, targetCenter.x - waterDirection * 18, progress * 0.34),
+      y: lerp(perchPoint.y, targetCenter.y - frame.camera.tileSize.height * 0.18, progress * 0.34),
+    };
+  }
+
+  if (egret.state === "eating") {
+    return {
+      direction: waterDirection,
+      mode: egret.state,
+      progress: clamp(elapsed / EGRET_EAT_MS, 0, 1),
+      x: perchPoint.x,
+      y: perchPoint.y + Math.sin(frame.time / 180) * 0.8,
+    };
+  }
+
+  if (egret.state === "leaving") {
+    const progress = easeInOut(clamp(elapsed / EGRET_LEAVE_MS, 0, 1));
+    const endX = waterDirection === 1 ? frame.camera.viewportWidth + 96 : -96;
+    const endY = perchPoint.y - 150;
+
+    return {
+      direction: waterDirection,
+      mode: egret.state,
+      progress,
+      x: lerp(perchPoint.x - waterDirection * 8, endX, progress),
+      y: lerp(perchPoint.y, endY, progress) + Math.sin(progress * Math.PI) * -20,
+    };
+  }
+
+  return {
+    direction: waterDirection,
+    mode: egret.state,
+    progress: 0,
+    x: perchPoint.x,
+    y: perchPoint.y + Math.sin(frame.time / 650) * 0.7,
+  };
+}
+
 function drawLineAndEncounter(
   ctx: CanvasRenderingContext2D,
   frame: CanvasHarborFrame,
@@ -1051,15 +1293,37 @@ function drawLineAndEncounter(
     frame.gameState === "reeling" && frame.reelingStartedAt
       ? Math.min(1, Math.max(0, (frame.time - frame.reelingStartedAt) / frame.reelDuration))
       : 0;
+  const castingProgress =
+    frame.gameState === "casting" && frame.castingStartedAt
+      ? clamp((frame.time - frame.castingStartedAt) / CAST_ANIMATION_MS, 0, 1)
+      : frame.gameState === "casting"
+        ? 1
+        : 0;
   let rodPull = 0;
-  let rodTip = getRodTipPosition(playerCenter.x, playerCenter.y, fisherMode, motion, fisherScale, rodPull);
+  let rodTip = getRodTipPosition(
+    playerCenter.x,
+    playerCenter.y,
+    fisherMode,
+    motion,
+    fisherScale,
+    rodPull,
+    castingProgress,
+  );
 
   if (frame.gameState === "reeling") {
     const reelEndX = lerp(targetCenter.x, rodTip.x - 12, easeInOut(reelProgress));
     const distancePull = (reelEndX - playerCenter.x) / Math.max(40, frame.camera.tileSize.width * 1.15);
     const fightPull = (1 - reelProgress) * 0.42;
     rodPull = clamp(distancePull + fightPull, 0, 1.35);
-    rodTip = getRodTipPosition(playerCenter.x, playerCenter.y, fisherMode, motion, fisherScale, rodPull);
+    rodTip = getRodTipPosition(
+      playerCenter.x,
+      playerCenter.y,
+      fisherMode,
+      motion,
+      fisherScale,
+      rodPull,
+      castingProgress,
+    );
   }
 
   const inspectPoint = {
@@ -1069,6 +1333,13 @@ function drawLineAndEncounter(
   let currentLineEnd =
     frame.gameState === "inspecting"
       ? inspectPoint
+      : frame.gameState === "casting"
+        ? {
+            x: lerp(rodTip.x - 4, targetCenter.x, easeInOut(castingProgress)),
+            y:
+              lerp(rodTip.y + 10, targetCenter.y - 4, easeInOut(castingProgress)) -
+              Math.sin(castingProgress * Math.PI) * Math.max(34, frame.camera.tileSize.height * 0.9),
+          }
       : frame.gameState === "reeling" && frame.reelingStartedAt
         ? {
             x: lerp(targetCenter.x, rodTip.x - 12, easeInOut(reelProgress)),
@@ -1169,7 +1440,36 @@ function drawLineAndEncounter(
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(Math.round(rodTip.x), Math.round(rodTip.y));
-  if (frame.gameState === "waiting") {
+  if (frame.gameState === "casting") {
+    const castEase = easeInOut(castingProgress);
+    const loop = Math.sin(castEase * Math.PI);
+    const firstControl = {
+      x: lerp(rodTip.x, currentLineEnd.x, 0.28),
+      y: Math.min(rodTip.y, currentLineEnd.y) - 14 - loop * Math.max(34, frame.camera.tileSize.height * 0.7),
+    };
+    const secondControl = {
+      x: lerp(rodTip.x, currentLineEnd.x, 0.68),
+      y: Math.min(rodTip.y, currentLineEnd.y) - 6 - loop * Math.max(48, frame.camera.tileSize.height * 0.86),
+    };
+
+    if (typeof ctx.bezierCurveTo === "function") {
+      ctx.bezierCurveTo(
+        Math.round(firstControl.x),
+        Math.round(firstControl.y),
+        Math.round(secondControl.x),
+        Math.round(secondControl.y),
+        Math.round(currentLineEnd.x),
+        Math.round(currentLineEnd.y),
+      );
+    } else {
+      ctx.quadraticCurveTo(
+        Math.round(secondControl.x),
+        Math.round(secondControl.y),
+        Math.round(currentLineEnd.x),
+        Math.round(currentLineEnd.y),
+      );
+    }
+  } else if (frame.gameState === "waiting") {
     const controlX = (rodTip.x + currentLineEnd.x) / 2 + 4;
     const controlY = Math.max(rodTip.y, currentLineEnd.y) + 12;
     ctx.quadraticCurveTo(
@@ -1205,7 +1505,22 @@ function drawLineAndEncounter(
     }
   }
 
-  if (frame.gameState === "waiting" || frame.gameState === "hooked") {
+  if (frame.gameState === "casting") {
+    if (castingProgress > 0.06) {
+      drawPixelBobber(ctx, currentLineEnd.x, currentLineEnd.y + 2, frame.gameState, Math.floor(frame.time / 180));
+    }
+
+    if (castingProgress > 0.76) {
+      drawSplashFx(
+        ctx,
+        targetCenter.x,
+        targetCenter.y + 5,
+        Math.floor(frame.time / 120),
+        detailScale,
+        clamp((castingProgress - 0.76) / 0.24, 0, 1) * 0.7,
+      );
+    }
+  } else if (frame.gameState === "waiting" || frame.gameState === "hooked") {
     drawPixelBobber(ctx, currentLineEnd.x, currentLineEnd.y + 2, frame.gameState, Math.floor(frame.time / 180));
   }
 
@@ -1263,6 +1578,12 @@ export function drawCanvasHarborFrame(ctx: CanvasRenderingContext2D, frame: Canv
   const fishScaleBoost = Math.max(1.35, Math.min(2.1, detailScale * 0.32));
   const frameIndex = Math.floor(frame.time / 180);
   const motion = frame.time / 150;
+  const castingProgress =
+    frame.gameState === "casting" && frame.castingStartedAt
+      ? clamp((frame.time - frame.castingStartedAt) / CAST_ANIMATION_MS, 0, 1)
+      : frame.gameState === "casting"
+        ? 1
+        : 0;
   const player = getAnimatedPlayerCenter(frame, frame.time);
   const drawables: SceneDrawable[] = [];
 
@@ -1322,6 +1643,29 @@ export function drawCanvasHarborFrame(ctx: CanvasRenderingContext2D, frame: Canv
     });
   }
 
+  if (frame.ambientEgret) {
+    const pose = getEgretPose(frame.ambientEgret, frame);
+    const egretScale = Math.max(1.28, Math.min(1.95, detailScale * 0.31));
+    drawables.push({
+      id: frame.ambientEgret.id,
+      layer: "characters",
+      y: pose.y + (pose.mode === "striking" ? frame.camera.tileSize.height * 0.45 : 0),
+      draw: () => {
+        drawPixelEgret(
+          ctx,
+          pose.x,
+          pose.y,
+          pose.direction,
+          pose.mode,
+          pose.progress,
+          frameIndex,
+          egretScale,
+          frame.ambientEgret?.caughtFish,
+        );
+      },
+    });
+  }
+
   let rodPull = 0;
   drawables.push({
     id: "line-and-encounter",
@@ -1347,7 +1691,16 @@ export function drawCanvasHarborFrame(ctx: CanvasRenderingContext2D, frame: Canv
     layer: "characters",
     y: player.center.y,
     draw: () => {
-      drawPixelFisher(ctx, player.center.x, player.center.y, player.mode, motion, fisherScale, rodPull);
+      drawPixelFisher(
+        ctx,
+        player.center.x,
+        player.center.y,
+        player.mode,
+        motion,
+        fisherScale,
+        rodPull,
+        castingProgress,
+      );
     },
   });
 

@@ -42,6 +42,7 @@ export interface HarborWidgetState {
   gameState:
     | "idle"
     | "walking"
+    | "casting"
     | "waiting"
     | "hooked"
     | "reeling"

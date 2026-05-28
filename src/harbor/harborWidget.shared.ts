@@ -4,6 +4,7 @@ import type { FishTemplate, ShoreTile, Tile } from "../lib/pond/types";
 export type HarborGameMode =
   | "idle"
   | "walking"
+  | "casting"
   | "waiting"
   | "hooked"
   | "reeling"
@@ -27,6 +28,31 @@ export interface AmbientFish {
   expiresAt: number;
 }
 
+export type AmbientEgretState = "arriving" | "watching" | "striking" | "eating" | "leaving";
+
+export interface AmbientEgret {
+  id: string;
+  state: AmbientEgretState;
+  perchTile: ShoreTile;
+  targetWaterTile: Tile;
+  direction: 1 | -1;
+  startedAt: number;
+  stateStartedAt: number;
+  hasSpottedFish?: boolean;
+  caughtFish?: {
+    accent: string;
+    direction: 1 | -1;
+    fishId: string;
+    size: number;
+  };
+}
+
+export interface EgretPerchCandidate {
+  direction: 1 | -1;
+  perchTile: ShoreTile;
+  targetWaterTile: Tile;
+}
+
 export interface MovementPath {
   tiles: ShoreTile[];
   startedAt: number;
@@ -48,6 +74,19 @@ export const AMBIENT_RESPAWN_MIN_MS = 1800;
 export const AMBIENT_RESPAWN_MAX_MS = 4200;
 export const AMBIENT_LIFETIME_MIN_MS = 32000;
 export const AMBIENT_LIFETIME_MAX_MS = 56000;
+export const EGRET_INITIAL_VISIT_MIN_MS = 1800;
+export const EGRET_INITIAL_VISIT_MAX_MS = 5200;
+export const EGRET_VISIT_MIN_MS = 14000;
+export const EGRET_VISIT_MAX_MS = 26000;
+export const EGRET_ARRIVE_MS = 5200;
+export const EGRET_FISH_APPROACH_MS = 9000;
+export const EGRET_WATCH_MAX_MS = 45000;
+export const EGRET_STRIKE_MS = 720;
+export const EGRET_EAT_MS = 6500;
+export const EGRET_LEAVE_MS = 5200;
+export const EGRET_PLAYER_BIAS_RANGE_TILES = 4;
+export const EGRET_PLAYER_BIAS_WEIGHT = 0.4;
+export const CAST_ANIMATION_MS = 760;
 export const WALK_SEGMENT_MS = 190;
 export const INITIAL_AMBIENT_BLUEPRINTS = [
   { from: { row: 7, col: 5 }, to: { row: 7, col: 4 }, phase: 0.1, duration: 1200 },
@@ -85,6 +124,10 @@ export function getStatusHeading(
 ) {
   if (gameState === "walking") {
     return "Changing spots";
+  }
+
+  if (gameState === "casting") {
+    return "Casting out";
   }
 
   if (gameState === "hooked") {
@@ -130,6 +173,101 @@ export function buildNearShoreWaterKeys(waterTiles: Tile[], shoreline: ShoreTile
   }
 
   return keys;
+}
+
+export function buildEgretPerchCandidates(
+  shoreline: ShoreTile[],
+  waterTiles: Tile[],
+): EgretPerchCandidate[] {
+  const waterByKey = new Map(waterTiles.map((tile) => [getTileKey(tile), tile] as const));
+  const preferredShoreline = shoreline.filter((tile) => tile.castable && !tile.dock);
+  const shorelineCandidates = preferredShoreline.length > 0 ? preferredShoreline : shoreline;
+  const candidates: EgretPerchCandidate[] = [];
+  const sideNeighborSteps = [
+    { row: -1, col: 0 },
+    { row: 1, col: 0 },
+    { row: 0, col: -1 },
+    { row: 0, col: 1 },
+  ];
+
+  for (const perchTile of shorelineCandidates) {
+    const adjacentWater: Tile[] = [];
+
+    for (const step of sideNeighborSteps) {
+      const waterTile = waterByKey.get(
+        getTileKey({
+          row: perchTile.row + step.row,
+          col: perchTile.col + step.col,
+        }),
+      );
+
+      if (waterTile) {
+        adjacentWater.push(waterTile);
+      }
+    }
+
+    if (adjacentWater.length === 0) {
+      continue;
+    }
+
+    const targetWaterTile =
+      adjacentWater.find((tile) => tile.col <= perchTile.col) ?? adjacentWater[0];
+
+    candidates.push({
+      perchTile,
+      targetWaterTile,
+      direction: targetWaterTile.col >= perchTile.col ? 1 : -1,
+    });
+  }
+
+  return candidates;
+}
+
+export function getEgretPerchPlayerBiasWeight(
+  perchTile: Tile,
+  playerTile: Tile,
+  biasRange = EGRET_PLAYER_BIAS_RANGE_TILES,
+) {
+  const distance = getTileRangeDistance(playerTile, perchTile);
+
+  if (distance > biasRange) {
+    return 1;
+  }
+
+  return 1 + (biasRange + 1 - distance) * EGRET_PLAYER_BIAS_WEIGHT;
+}
+
+export function chooseEgretPerchCandidate(
+  candidates: EgretPerchCandidate[],
+  playerTile: Tile | undefined,
+  random: () => number,
+) {
+  const eligibleCandidates = playerTile
+    ? candidates.filter((candidate) => !tileMatches(candidate.perchTile, playerTile))
+    : candidates;
+
+  if (eligibleCandidates.length === 0) {
+    return undefined;
+  }
+
+  const weightedCandidates = eligibleCandidates.map((candidate) => ({
+    candidate,
+    weight: playerTile ? getEgretPerchPlayerBiasWeight(candidate.perchTile, playerTile) : 1,
+  }));
+  const totalWeight = weightedCandidates.reduce((total, candidate) => {
+    return total + candidate.weight;
+  }, 0);
+  let threshold = random() * totalWeight;
+
+  for (const weightedCandidate of weightedCandidates) {
+    threshold -= weightedCandidate.weight;
+
+    if (threshold <= 0) {
+      return weightedCandidate.candidate;
+    }
+  }
+
+  return weightedCandidates.at(-1)?.candidate;
 }
 
 export function getMinimumTileDistance(origin: Tile, targets: Tile[]) {
@@ -340,6 +478,10 @@ export function findShorePath(
 export function getGameStateLabel(gameState: HarborGameMode, isCreelFull: boolean) {
   if (gameState === "walking") {
     return "Walking";
+  }
+
+  if (gameState === "casting") {
+    return "Casting";
   }
 
   if (gameState === "hooked") {

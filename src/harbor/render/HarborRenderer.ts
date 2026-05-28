@@ -8,7 +8,7 @@ import type {
   TileSize,
 } from "../../lib/pond/types";
 import type { HarborArtifact } from "../HarborWidget.types";
-import type { AmbientFish, HarborGameMode, MovementPath } from "../harborWidget.shared";
+import type { AmbientEgret, AmbientFish, HarborGameMode, MovementPath } from "../harborWidget.shared";
 import type { BackdropTile } from "./SceneLayers";
 
 export interface ScenePoint {
@@ -26,11 +26,13 @@ export interface HarborCamera {
 
 export interface CanvasHarborFrame {
   activeCatchPreview?: CatchInstance;
+  ambientEgret?: AmbientEgret;
   ambientFish: AmbientFish[];
   approachDirection: 1 | -1;
   approachStartedAt?: number;
   backdropTiles: BackdropTile[];
   camera: HarborCamera;
+  castingStartedAt?: number;
   encounterFishScale: number;
   gameState: HarborGameMode;
   hoveredWaterTile?: Tile;

@@ -38,11 +38,24 @@ import {
   AMBIENT_RESPAWN_MIN_MS,
   AMBIENT_SWIM_MAX_MS,
   AMBIENT_SWIM_MIN_MS,
+  CAST_ANIMATION_MS,
+  EGRET_ARRIVE_MS,
+  EGRET_EAT_MS,
+  EGRET_FISH_APPROACH_MS,
+  EGRET_INITIAL_VISIT_MAX_MS,
+  EGRET_INITIAL_VISIT_MIN_MS,
+  EGRET_LEAVE_MS,
+  EGRET_STRIKE_MS,
+  EGRET_VISIT_MAX_MS,
+  EGRET_VISIT_MIN_MS,
+  EGRET_WATCH_MAX_MS,
   INITIAL_AMBIENT_BLUEPRINTS,
   WALK_SEGMENT_MS,
+  buildEgretPerchCandidates,
   buildNearShoreWaterKeys,
   buildShoreNeighborMap,
   buildWaterNeighborMap,
+  chooseEgretPerchCandidate,
   chooseNextSwimTile,
   findShorePath,
   getAmbientFishBaseSize,
@@ -53,8 +66,10 @@ import {
   isTileWithinCastRange,
   randomBetween,
   tileMatches,
+  type AmbientEgret,
   type AmbientFish,
   type EncounterContext,
+  type EgretPerchCandidate,
   type HarborGameMode,
   type MovementPath,
 } from "./harborWidget.shared";
@@ -164,11 +179,16 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   const scoreRef = useRef(0);
   const ambientFishRef = useRef<AmbientFish[]>([]);
   const ambientRandomRef = useRef(createSeededRandom(`${manifest.pond.id}:ambient-school`));
+  const egretRandomRef = useRef(createSeededRandom(`${manifest.pond.id}:egret`));
+  const ambientEgretRef = useRef<AmbientEgret>();
+  const nextEgretVisitAtRef = useRef<number>();
+  const egretVisitNumberRef = useRef(0);
   const movementRef = useRef<MovementPath>();
   const selectedWaterRef = useRef<Tile>();
   const castNumberRef = useRef(0);
   const gameStateRef = useRef<HarborGameMode>("idle");
   const playerTileRef = useRef<ShoreTile>();
+  const castingStartedAtRef = useRef<number>();
   const reelingStartedAtRef = useRef<number>();
   const reelDurationRef = useRef(REEL_ANIMATION_MS);
   const approachStartedAtRef = useRef<number>();
@@ -216,6 +236,10 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     [manifest.pond.shoreline],
   );
   const waterNeighborMap = useMemo(() => buildWaterNeighborMap(waterTiles), [waterTiles]);
+  const egretPerchCandidates = useMemo(
+    () => buildEgretPerchCandidates(manifest.pond.shoreline, waterTiles),
+    [manifest.pond.shoreline, waterTiles],
+  );
   const ambientFishTemplates = useMemo(
     () =>
       manifest.fish.map((fish) => ({
@@ -238,6 +262,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   const [isHudCollapsed, setIsHudCollapsed] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<HarborArtifact>();
   const [ambientFish, setAmbientFish] = useState<AmbientFish[]>([]);
+  const [ambientEgret, setAmbientEgret] = useState<AmbientEgret>();
   const [statusMessage, setStatusMessage] = useState(
     "Move across the left shoreline, hover the water to line up a cast, and let the fisher handle the fight.",
   );
@@ -250,6 +275,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       : undefined;
   const sceneWaterTile =
     gameState === "waiting" ||
+    gameState === "casting" ||
     gameState === "hooked" ||
     gameState === "reeling" ||
     gameState === "inspecting"
@@ -324,6 +350,110 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     );
   }
 
+  function scheduleNextEgretVisit(now: number, initial = false) {
+    nextEgretVisitAtRef.current =
+      now +
+      randomBetween(
+        egretRandomRef.current,
+        initial ? EGRET_INITIAL_VISIT_MIN_MS : EGRET_VISIT_MIN_MS,
+        initial ? EGRET_INITIAL_VISIT_MAX_MS : EGRET_VISIT_MAX_MS,
+      );
+  }
+
+  function createAmbientEgretState(now: number, candidates: EgretPerchCandidate[]) {
+    const random = egretRandomRef.current;
+    const currentPlayerTile = playerTileRef.current ?? playerTile;
+    const candidate = chooseEgretPerchCandidate(candidates, currentPlayerTile, random);
+
+    if (!candidate) {
+      scheduleNextEgretVisit(now);
+      return undefined;
+    }
+
+    egretVisitNumberRef.current += 1;
+
+    return {
+      id: `egret-${egretVisitNumberRef.current}`,
+      state: "arriving" as const,
+      perchTile: candidate.perchTile,
+      targetWaterTile: candidate.targetWaterTile,
+      direction: candidate.direction,
+      startedAt: now,
+      stateStartedAt: now,
+    };
+  }
+
+  function makeLeavingEgret(egret: AmbientEgret, now: number): AmbientEgret {
+    return {
+      ...egret,
+      state: "leaving",
+      stateStartedAt: now,
+      caughtFish: undefined,
+    };
+  }
+
+  function sendEgretAway(now: number, egret = ambientEgretRef.current) {
+    if (!egret || egret.state === "leaving") {
+      return undefined;
+    }
+
+    const leavingEgret = makeLeavingEgret(egret, now);
+
+    ambientEgretRef.current = leavingEgret;
+    setAmbientEgret(leavingEgret);
+
+    return leavingEgret;
+  }
+
+  function advanceAmbientEgretState(egret: AmbientEgret | undefined, now: number) {
+    if (!egret) {
+      return undefined;
+    }
+
+    const elapsed = now - egret.stateStartedAt;
+
+    if (egret.state === "arriving" && elapsed >= EGRET_ARRIVE_MS) {
+      return {
+        ...egret,
+        state: "watching" as const,
+        stateStartedAt: now,
+      };
+    }
+
+    if (egret.state === "watching" && elapsed >= EGRET_WATCH_MAX_MS) {
+      return {
+        ...egret,
+        state: "leaving" as const,
+        stateStartedAt: now,
+        caughtFish: undefined,
+      };
+    }
+
+    if (egret.state === "striking" && elapsed >= EGRET_STRIKE_MS) {
+      return {
+        ...egret,
+        state: "eating" as const,
+        stateStartedAt: now,
+      };
+    }
+
+    if (egret.state === "eating" && elapsed >= EGRET_EAT_MS) {
+      return {
+        ...egret,
+        state: "leaving" as const,
+        stateStartedAt: now,
+        caughtFish: undefined,
+      };
+    }
+
+    if (egret.state === "leaving" && elapsed >= EGRET_LEAVE_MS) {
+      scheduleNextEgretVisit(now);
+      return undefined;
+    }
+
+    return egret;
+  }
+
   function buildCatchResult(target: Tile, activeCastNumber: number, fishId?: string) {
     const random = createSeededRandom(
       `${manifest.pond.id}:${activeCastNumber}:${target.row}:${target.col}:${fishId ?? "spawn"}`,
@@ -341,9 +471,42 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     return REEL_ANIMATION_MS + Math.min(1800, Math.max(700, waterEdgeDistance * 420));
   }
 
+  function startCastingAtTile(
+    target: Tile,
+    activeCastNumber: number,
+    castingMessage: string,
+    settledMessage: string,
+  ) {
+    clearTimers(timerRef);
+    const now = performance.now();
+
+    castNumberRef.current = activeCastNumber;
+    castingStartedAtRef.current = now;
+    gameStateRef.current = "casting";
+    selectedWaterRef.current = target;
+    encounterRef.current = undefined;
+    approachStartedAtRef.current = undefined;
+    reelingStartedAtRef.current = undefined;
+    reelDurationRef.current = REEL_ANIMATION_MS;
+    inspectionStartedAtRef.current = undefined;
+    setSelectedWaterTile(target);
+    setHoveredWaterTile(target);
+    setCastNumber(activeCastNumber);
+    setGameState("casting");
+    setActiveCatchPreview(undefined);
+    setStatusMessage(castingMessage);
+
+    timerRef.current.push(
+      window.setTimeout(() => {
+        startWaitingAtTile(target, activeCastNumber, settledMessage);
+      }, CAST_ANIMATION_MS),
+    );
+  }
+
   function startWaitingAtTile(target: Tile, activeCastNumber: number, message: string) {
     clearTimers(timerRef);
     castNumberRef.current = activeCastNumber;
+    castingStartedAtRef.current = undefined;
     gameStateRef.current = "waiting";
     selectedWaterRef.current = target;
     encounterRef.current = undefined;
@@ -427,6 +590,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     setLastCatch(catchResult);
     encounterRef.current = undefined;
     approachStartedAtRef.current = undefined;
+    castingStartedAtRef.current = undefined;
     reelingStartedAtRef.current = undefined;
     reelDurationRef.current = REEL_ANIMATION_MS;
     inspectionStartedAtRef.current = undefined;
@@ -442,17 +606,15 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     if (selectedWaterRef.current && tileMatches(selectedWaterRef.current, target)) {
       const nextCastNumber = activeCastNumber + 1;
 
-      castNumberRef.current = nextCastNumber;
-      gameStateRef.current = "waiting";
-      setCastNumber(nextCastNumber);
-      setGameState("waiting");
-      setActiveCatchPreview(undefined);
-      setStatusMessage(
+      startCastingAtTile(
+        target,
+        nextCastNumber,
         kept
           ? artifact
             ? `Caught ${catchResult.displayName}. Its artifact is in the rail, and the fisher casts right back out.`
-            : `Caught ${catchResult.displayName} for ${catchResult.points} points. The line drops back into the pond.`
+            : `Caught ${catchResult.displayName} for ${catchResult.points} points. The fisher casts right back out.`
           : `Caught ${catchResult.displayName} for ${catchResult.points} points, but the rail was full, so it was released after inspection.`,
+        `The line lands back on water tile ${target.row}:${target.col}, and the fisher waits for the next passing shadow.`,
       );
       return;
     }
@@ -482,10 +644,22 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     }
 
     const path = findShorePath(currentTile, tile, shoreNeighborMap);
+    const now = performance.now();
+    const currentEgret = ambientEgretRef.current;
+    const pathTouchesEgret =
+      currentEgret &&
+      currentEgret.state !== "leaving" &&
+      (tileMatches(tile, currentEgret.perchTile) ||
+        path.some((pathTile) => tileMatches(pathTile, currentEgret.perchTile)));
+
+    if (pathTouchesEgret) {
+      sendEgretAway(now, currentEgret);
+    }
 
     clearTimers(timerRef);
     encounterRef.current = undefined;
     approachStartedAtRef.current = undefined;
+    castingStartedAtRef.current = undefined;
     reelingStartedAtRef.current = undefined;
     reelDurationRef.current = REEL_ANIMATION_MS;
     inspectionStartedAtRef.current = undefined;
@@ -494,7 +668,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     playerTileRef.current = tile;
     movementRef.current = {
       tiles: path,
-      startedAt: performance.now(),
+      startedAt: now,
       segmentDuration: WALK_SEGMENT_MS,
     };
     setPlayerTile(tile);
@@ -541,12 +715,15 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
 
     const nextCastNumber = castNumber + 1;
 
-    startWaitingAtTile(
+    startCastingAtTile(
       tile,
       nextCastNumber,
       isCreelFull
-        ? `Cast to water tile ${tile.row}:${tile.col}. The rail is full, so anything landed will be released after inspection.`
-        : `Cast to water tile ${tile.row}:${tile.col}. The line settles while the fisher waits for a passing shadow.`,
+        ? `Casting to water tile ${tile.row}:${tile.col}. The rail is full, so anything landed will be released after inspection.`
+        : `Casting to water tile ${tile.row}:${tile.col}.`,
+      isCreelFull
+        ? `The line settles on water tile ${tile.row}:${tile.col}. The rail is full, so anything landed will be released after inspection.`
+        : `The line settles on water tile ${tile.row}:${tile.col} while the fisher waits for a passing shadow.`,
     );
   }
 
@@ -560,6 +737,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       selectArtifact(undefined);
     }
     if (
+      gameStateRef.current !== "casting" &&
       gameStateRef.current !== "waiting" &&
       gameStateRef.current !== "hooked" &&
       gameStateRef.current !== "reeling" &&
@@ -689,7 +867,10 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
             .map((tile, index) => createRespawnedAmbientFish(`ambient-${index + 1}`, now));
 
     ambientFishRef.current = nextAmbientFish;
+    ambientEgretRef.current = undefined;
+    scheduleNextEgretVisit(now, true);
     setAmbientFish(nextAmbientFish);
+    setAmbientEgret(undefined);
   }, [ambientFishTemplates, manifest.fish, manifest.pond.mask, waterTiles, waterNeighborMap]);
 
   useEffect(() => {
@@ -700,6 +881,35 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
         gameStateRef.current === "waiting" && !approachStartedAtRef.current
           ? selectedWaterRef.current
           : undefined;
+      let nextEgret = advanceAmbientEgretState(ambientEgretRef.current, now);
+
+      if (
+        !nextEgret &&
+        typeof nextEgretVisitAtRef.current === "number" &&
+        now >= nextEgretVisitAtRef.current &&
+        egretPerchCandidates.length > 0
+      ) {
+        nextEgret = createAmbientEgretState(now, egretPerchCandidates);
+      }
+
+      const currentPlayerTile = playerTileRef.current;
+      if (
+        nextEgret &&
+        currentPlayerTile &&
+        nextEgret.state !== "leaving" &&
+        tileMatches(nextEgret.perchTile, currentPlayerTile)
+      ) {
+        nextEgret = makeLeavingEgret(nextEgret, now);
+      }
+
+      const egretWatchTile = nextEgret?.state === "watching" ? nextEgret.targetWaterTile : undefined;
+      let egretNeedsFish =
+        Boolean(
+          nextEgret?.state === "watching" &&
+            !nextEgret.hasSpottedFish &&
+            !baitTile &&
+            now - nextEgret.stateStartedAt >= EGRET_FISH_APPROACH_MS,
+        );
 
       const nextAmbientFish = ambientFishRef.current.map((fish) => {
         if (!fish.active) {
@@ -724,6 +934,34 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
 
         const arrivedTile = fish.toTile;
 
+        if (nextEgret?.state === "watching" && egretNeedsFish) {
+          const approachCandidates =
+            waterNeighborMap
+              .get(getTileKey(nextEgret.targetWaterTile))
+              ?.filter((tile) => !tileMatches(tile, nextEgret?.targetWaterTile)) ?? [];
+          const approachTile =
+            approachCandidates[Math.floor(random() * approachCandidates.length)] ??
+            fish.toTile;
+          const targetWaterTile = nextEgret.targetWaterTile;
+
+          nextEgret = {
+            ...nextEgret,
+            hasSpottedFish: true,
+          };
+          egretNeedsFish = false;
+
+          return {
+            ...fish,
+            fromTile: approachTile,
+            toTile: targetWaterTile,
+            previousTile: fish.fromTile,
+            segmentStartedAt: now,
+            segmentDuration: randomBetween(random, 900, 1400),
+            direction: targetWaterTile.col >= approachTile.col ? 1 : -1,
+            expiresAt: Math.max(fish.expiresAt, now + EGRET_WATCH_MAX_MS),
+          };
+        }
+
         if (baitTile && tileMatches(arrivedTile, baitTile) && !encounterRef.current) {
           const castContext = {
             target: baitTile,
@@ -745,12 +983,36 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
           };
         }
 
+        if (nextEgret?.state === "watching" && tileMatches(arrivedTile, nextEgret.targetWaterTile)) {
+          nextEgret = {
+            ...nextEgret,
+            state: "striking",
+            stateStartedAt: now,
+            caughtFish: {
+              accent: fish.accent,
+              direction: fish.direction,
+              fishId: fish.fishId,
+              size: fish.size,
+            },
+          };
+
+          if (gameStateRef.current === "idle" || gameStateRef.current === "inventory-full") {
+            setStatusMessage("An egret snaps a small fish from the shallows and settles in to eat.");
+          }
+
+          return {
+            ...fish,
+            active: false,
+            respawnAt: now + randomBetween(random, AMBIENT_RESPAWN_MIN_MS, AMBIENT_RESPAWN_MAX_MS),
+          };
+        }
+
         const nextTile = chooseNextSwimTile(
           arrivedTile,
           fish.fromTile,
           waterNeighborMap,
           random,
-          baitTile,
+          baitTile ?? egretWatchTile,
         );
 
         return {
@@ -765,11 +1027,13 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       });
 
       ambientFishRef.current = nextAmbientFish;
+      ambientEgretRef.current = nextEgret;
       setAmbientFish(nextAmbientFish);
+      setAmbientEgret(nextEgret);
     }, AMBIENT_LOGIC_TICK_MS);
 
     return () => window.clearInterval(interval);
-  }, [waterNeighborMap]);
+  }, [egretPerchCandidates, waterNeighborMap]);
 
   useEffect(() => {
     return () => clearTimers(timerRef);
@@ -823,7 +1087,9 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
         gameState={gameState}
         activeCatchPreview={activeCatchPreview}
         ambientFish={ambientFish}
+        ambientEgret={ambientEgret}
         movement={movementRef.current}
+        castingStartedAt={castingStartedAtRef.current}
         reelingStartedAt={reelingStartedAtRef.current}
         reelDuration={reelDurationRef.current}
         approachStartedAt={approachStartedAtRef.current}

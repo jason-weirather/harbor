@@ -1183,7 +1183,7 @@
       "authorName": "Josh",
       "canonicalUrl": "/artifacts/dock-checklist/",
       "readingUrl": "/plain/artifacts/dock-checklist/",
-      "summary": "Three things worth checking before the next Harbor room ships.",
+      "summary": "Three things worth checking before the next Harbor widget ships.",
       "pointsBonus": 3,
       "external": false
     },
@@ -1196,7 +1196,7 @@
       "authorName": "Josh",
       "canonicalUrl": "/artifacts/lantern-note/",
       "readingUrl": "/plain/artifacts/lantern-note/",
-      "summary": "Ship the smallest shimmer that proves the room has a pulse.",
+      "summary": "Ship the smallest shimmer that proves the widget has a pulse.",
       "pointsBonus": 4,
       "external": false
     },
@@ -1238,5 +1238,5 @@
       ]
     }
   ],
-  "generatedAt": "2026-05-28T03:22:44.045Z"
+  "generatedAt": "2026-05-28T05:23:55.841Z"
 }

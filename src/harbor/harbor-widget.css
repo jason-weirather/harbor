@@ -1,13 +1,15 @@
 .harbor-widget {
-  --harbor-paper: #fff9ef;
-  --harbor-panel: rgba(255, 251, 242, 0.88);
-  --harbor-border: rgba(22, 50, 74, 0.12);
+  --harbor-paper: #fff8e6;
+  --harbor-panel: rgba(248, 235, 206, 0.94);
+  --harbor-border: rgba(27, 57, 67, 0.2);
   --harbor-ink: #16324a;
-  --harbor-ink-soft: #446276;
-  --harbor-pond: #1e90a7;
-  --harbor-pond-deep: #156477;
-  --harbor-sun: #f59e0b;
-  --harbor-shadow: 0 24px 56px rgba(22, 50, 74, 0.18);
+  --harbor-ink-soft: #4c6570;
+  --harbor-pond: #217f8d;
+  --harbor-pond-deep: #155266;
+  --harbor-sun: #c77738;
+  --harbor-copper: #a45e32;
+  --harbor-line: rgba(103, 72, 45, 0.22);
+  --harbor-shadow: 0 -18px 44px rgba(21, 41, 46, 0.22);
   --harbor-font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   --harbor-font-body: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
   --harbor-panel-height: clamp(19rem, 33vh, 24rem);
@@ -28,14 +30,14 @@
 .harbor-widget--embedded,
 .harbor-widget--background {
   border: 1px solid var(--harbor-border);
-  border-radius: 1.5rem;
+  border-radius: 8px;
   box-shadow: 0 18px 42px rgba(22, 50, 74, 0.08);
   height: auto;
   overflow: hidden;
 }
 
 .harbor-widget--embedded {
-  background: linear-gradient(180deg, #fffdf8 0%, #f7ecda 100%);
+  background: linear-gradient(180deg, #fffaf0 0%, #e8d8bb 100%);
 }
 
 .harbor-widget--background {
@@ -47,7 +49,7 @@
 }
 
 .harbor-widget__scene {
-  background: linear-gradient(180deg, #cfefff 0%, #7ecfdf 100%);
+  background: linear-gradient(180deg, #bfe9f1 0%, #75c8d0 100%);
   min-height: 0;
   outline: none;
   overflow: hidden;
@@ -66,7 +68,7 @@
 .harbor-widget__canvas {
   display: block;
   height: 100%;
-  image-rendering: pixelated;
+  image-rendering: auto;
   width: 100%;
 }
 
@@ -94,8 +96,12 @@
 
 .harbor-widget__panel {
   backdrop-filter: blur(16px);
-  background: var(--harbor-panel);
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(90deg, rgba(164, 94, 50, 0.08) 0 1px, transparent 1px 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(236, 216, 177, 0.36)),
+    var(--harbor-panel);
+  background-size: 17px 100%, auto, auto;
+  border-top: 3px solid rgba(107, 75, 48, 0.28);
   box-shadow: var(--harbor-shadow);
   display: grid;
   gap: 0.95rem;
@@ -105,6 +111,17 @@
   padding: 0.78rem 0.9rem 0.9rem;
   position: relative;
   z-index: 1;
+}
+
+.harbor-widget__panel::before {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent),
+    repeating-linear-gradient(90deg, rgba(74, 49, 31, 0.14) 0 1px, transparent 1px 10px);
+  content: "";
+  height: 0.42rem;
+  inset: 0 0 auto;
+  pointer-events: none;
+  position: absolute;
 }
 
 .harbor-widget--embedded .harbor-widget__panel,
@@ -117,13 +134,15 @@
   align-items: start;
   display: grid;
   gap: 0.95rem;
-  grid-template-columns: minmax(16rem, 1.2fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(16rem, 1.05fr) minmax(0, 1fr) auto;
 }
 
 .harbor-widget__summary {
+  border-left: 3px solid rgba(164, 94, 50, 0.32);
   display: grid;
   gap: 0.18rem;
   min-width: min(26rem, 100%);
+  padding-left: 0.7rem;
 }
 
 .harbor-widget__summary strong,
@@ -140,10 +159,10 @@
 
 .harbor-widget__eyebrow,
 .harbor-widget__artifact-label {
-  color: var(--harbor-pond-deep);
+  color: var(--harbor-copper);
   font-size: 0.76rem;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.12em;
   margin: 0;
   text-transform: uppercase;
 }
@@ -165,9 +184,15 @@
 }
 
 .harbor-widget__artifact-panel {
-  background: rgba(255, 255, 255, 0.56);
-  border: 1px solid rgba(22, 50, 74, 0.08);
-  border-radius: 1.15rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0)),
+    repeating-linear-gradient(180deg, transparent 0 1.75rem, rgba(34, 77, 86, 0.09) 1.75rem calc(1.75rem + 1px)),
+    #fff6d8;
+  border: 1px solid rgba(98, 70, 43, 0.24);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.48),
+    0 6px 14px rgba(66, 45, 29, 0.08);
   display: grid;
   gap: 0.28rem;
   grid-column: 1 / -1;
@@ -192,15 +217,17 @@
 
 .fishing-chip,
 .fishing-status-pill {
-  background: rgba(30, 144, 167, 0.1);
-  border-radius: 999px;
+  background: rgba(25, 93, 104, 0.1);
+  border: 1px solid rgba(25, 93, 104, 0.14);
+  border-radius: 8px;
   color: var(--harbor-ink);
   font-size: 0.88rem;
   padding: 0.5rem 0.74rem;
 }
 
 .fishing-status-pill {
-  background: rgba(245, 158, 11, 0.14);
+  background: rgba(199, 119, 56, 0.14);
+  border-color: rgba(164, 94, 50, 0.2);
 }
 
 .harbor-widget__rail {
@@ -226,9 +253,14 @@
 }
 
 .harbor-widget__rail-card {
-  background: rgba(255, 255, 255, 0.56);
-  border: 1px solid rgba(22, 50, 74, 0.08);
-  border-radius: 1.15rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(122, 86, 49, 0.08)),
+    #f8e8c5;
+  border: 1px solid rgba(89, 62, 40, 0.22);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.38),
+    inset 0 -10px 20px rgba(73, 50, 31, 0.05);
   column-gap: 0.7rem;
   display: grid;
   grid-template-columns: auto 1fr;
@@ -241,12 +273,17 @@
 }
 
 .harbor-widget__rail-card.is-selected {
-  border-color: rgba(21, 100, 119, 0.28);
-  box-shadow: inset 0 0 0 1px rgba(21, 100, 119, 0.14);
+  border-color: rgba(21, 100, 119, 0.46);
+  box-shadow:
+    inset 0 0 0 2px rgba(21, 100, 119, 0.18),
+    0 8px 18px rgba(21, 74, 86, 0.12);
 }
 
 .harbor-widget__rail-card--empty {
   align-items: center;
+  background:
+    repeating-linear-gradient(-45deg, rgba(85, 62, 43, 0.08) 0 6px, transparent 6px 12px),
+    #ead8b4;
   color: var(--harbor-ink-soft);
   justify-items: center;
   text-align: center;
@@ -254,10 +291,14 @@
 
 .harbor-widget__rail-swatch {
   background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.78), transparent 36%),
-    linear-gradient(135deg, var(--fish-accent), rgba(255, 255, 255, 0.16));
-  border-radius: 0.95rem;
-  box-shadow: inset 0 -8px 16px rgba(15, 23, 42, 0.12);
+    radial-gradient(ellipse at 42% 44%, rgba(255, 255, 255, 0.72), transparent 18%),
+    radial-gradient(ellipse at 58% 48%, var(--fish-accent), color-mix(in srgb, var(--fish-accent) 52%, #14394a) 68%, transparent 70%),
+    linear-gradient(135deg, rgba(31, 86, 93, 0.16), rgba(255, 255, 255, 0.2));
+  border: 1px solid rgba(23, 50, 74, 0.16);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 -8px 16px rgba(15, 23, 42, 0.12),
+    0 2px 0 rgba(255, 255, 255, 0.5);
   grid-row: 1 / span 2;
   height: 2.6rem;
   width: 2.6rem;
@@ -297,9 +338,9 @@
 .pond-button,
 .pond-link-button {
   appearance: none;
-  background: #fffdf8;
-  border: 1px solid rgba(22, 50, 74, 0.12);
-  border-radius: 999px;
+  background: #fff8e6;
+  border: 1px solid rgba(82, 57, 37, 0.22);
+  border-radius: 8px;
   color: var(--harbor-ink);
   cursor: pointer;
   font: inherit;
@@ -313,7 +354,8 @@
 
 .pond-button:not(:disabled):hover,
 .pond-link-button:hover {
-  border-color: rgba(21, 100, 119, 0.24);
+  background: #fff1ca;
+  border-color: rgba(21, 100, 119, 0.3);
   transform: translateY(-1px);
 }
 
@@ -329,6 +371,8 @@
 
 .pond-link-button {
   background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
   justify-self: start;
   padding: 0.1rem 0;
 }

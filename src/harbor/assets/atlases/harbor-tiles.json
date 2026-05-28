@@ -1,0 +1,19 @@
+{
+  "image": "harbor-tiles.png",
+  "meta": {
+    "description": "Placeholder frame keys for terrain and prop tiles. Replace dimensions with packed atlas coordinates when art lands.",
+    "pixelRatio": 1
+  },
+  "frames": {
+    "tile.water.shallow.0": { "x": 0, "y": 0, "w": 64, "h": 32 },
+    "tile.water.deep.0": { "x": 64, "y": 0, "w": 64, "h": 32 },
+    "tile.sand.0": { "x": 128, "y": 0, "w": 64, "h": 32 },
+    "tile.grass.0": { "x": 192, "y": 0, "w": 64, "h": 32 },
+    "overlay.shore.foam.0": { "x": 0, "y": 32, "w": 64, "h": 32 },
+    "prop.tree.pine.0": { "x": 64, "y": 32, "w": 64, "h": 96 },
+    "prop.reeds.0": { "x": 128, "y": 32, "w": 48, "h": 64 },
+    "prop.rock.0": { "x": 176, "y": 32, "w": 48, "h": 32 },
+    "prop.bush.0": { "x": 224, "y": 32, "w": 48, "h": 32 },
+    "prop.foreground.foliage.0": { "x": 0, "y": 128, "w": 96, "h": 64 }
+  }
+}

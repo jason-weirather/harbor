@@ -1,0 +1,12 @@
+{
+  "image": "harbor-fx.png",
+  "meta": {
+    "description": "Placeholder frame keys for water and catch effects.",
+    "pixelRatio": 1
+  },
+  "frames": {
+    "fx.ripple.0": { "x": 0, "y": 0, "w": 48, "h": 24 },
+    "fx.splash.0": { "x": 48, "y": 0, "w": 32, "h": 32 },
+    "fx.sparkle.0": { "x": 80, "y": 0, "w": 24, "h": 24 }
+  }
+}

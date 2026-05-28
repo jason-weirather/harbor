@@ -1,0 +1,10 @@
+{
+  "image": "harbor-fish.png",
+  "meta": {
+    "description": "Placeholder frame keys for fish silhouettes and catches.",
+    "pixelRatio": 1
+  },
+  "frames": {
+    "fish.lanternKoi.swim.0": { "x": 0, "y": 0, "w": 32, "h": 24 }
+  }
+}

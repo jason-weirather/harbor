@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_ROUTE = "/rooms/pond/";
+const DEFAULT_ROUTE = "/widget-demo/";
 const DEFAULT_PORT = 4173;
 const DEFAULT_WIDTH = 1758;
 const DEFAULT_HEIGHT = 1035;
@@ -269,7 +269,7 @@ async function main() {
     });
 
     await page.goto(targetUrl, { waitUntil: "networkidle" });
-    await page.waitForSelector(".fishing-game__scene canvas");
+    await page.waitForSelector(".harbor-widget__scene canvas");
     await page.waitForTimeout(700);
 
     if (moveTarget) {
@@ -282,7 +282,7 @@ async function main() {
       await page.waitForTimeout(options.castSettleMs);
     }
 
-    const scene = page.locator(".fishing-game__scene");
+    const scene = page.locator(".harbor-widget__scene");
     await scene.screenshot({
       path: outputPath,
       type: "png",

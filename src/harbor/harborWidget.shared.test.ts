@@ -3,18 +3,32 @@ import {
   buildEgretPerchCandidates,
   chooseEgretPerchCandidate,
   filterEgretPerchCandidatesForSafeBoard,
+  getHexNeighborTiles,
   getEgretPerchPlayerBiasWeight,
+  getTileRangeDistance,
 } from "./harborWidget.shared";
 import type { ShoreTile, Tile } from "../lib/pond/types";
 
 describe("harbor widget shared helpers", () => {
+  it("uses six neighbors for hex tiles", () => {
+    expect(getHexNeighborTiles({ row: 4, col: 4 })).toEqual([
+      { row: 4, col: 3 },
+      { row: 4, col: 5 },
+      { row: 3, col: 3 },
+      { row: 3, col: 4 },
+      { row: 5, col: 4 },
+      { row: 5, col: 5 },
+    ]);
+    expect(getTileRangeDistance({ row: 4, col: 4 }, { row: 7, col: 5 })).toBe(3);
+  });
+
   it("only gives egrets shoreline perches that share a side with water", () => {
     const shoreline: ShoreTile[] = [
       { row: 2, col: 2, terrain: "sand", castable: true },
       { row: 4, col: 4, terrain: "sand", castable: true },
     ];
     const waterTiles: Tile[] = [
-      { row: 3, col: 3 },
+      { row: 0, col: 0 },
       { row: 4, col: 5 },
     ];
 

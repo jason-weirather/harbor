@@ -85,7 +85,7 @@ export const EGRET_STRIKE_MS = 720;
 export const EGRET_EAT_MS = 6500;
 export const EGRET_LEAVE_MS = 5200;
 export const EGRET_PLAYER_BIAS_RANGE_TILES = 4;
-export const EGRET_PLAYER_BIAS_WEIGHT = 0.4;
+export const EGRET_PLAYER_BIAS_WEIGHT = 0.7;
 export const EGRET_SAFE_ROW_INSET_TILES = 2;
 export const EGRET_SAFE_WATER_COL_INSET_TILES = 1;
 export const CAST_ANIMATION_MS = 760;
@@ -106,6 +106,17 @@ export function tileMatches(left?: Tile, right?: Tile) {
 
 export function getTileKey(tile: Tile) {
   return `${tile.row}:${tile.col}`;
+}
+
+export function getHexNeighborTiles(tile: Tile): Tile[] {
+  return [
+    { row: tile.row, col: tile.col - 1 },
+    { row: tile.row, col: tile.col + 1 },
+    { row: tile.row - 1, col: tile.col - 1 },
+    { row: tile.row - 1, col: tile.col },
+    { row: tile.row + 1, col: tile.col },
+    { row: tile.row + 1, col: tile.col + 1 },
+  ];
 }
 
 export function getTileRangeDistance(origin: Tile, target: Tile) {
@@ -161,13 +172,11 @@ export function getStatusHeading(
 
 export function buildNearShoreWaterKeys(waterTiles: Tile[], shoreline: ShoreTile[]) {
   const keys = new Set<string>();
+  const shorelineKeys = new Set(shoreline.map(getTileKey));
 
   for (const waterTile of waterTiles) {
-    for (const shoreTile of shoreline) {
-      if (
-        Math.abs(waterTile.row - shoreTile.row) <= 1 &&
-        Math.abs(waterTile.col - shoreTile.col) <= 1
-      ) {
+    for (const neighbor of getHexNeighborTiles(waterTile)) {
+      if (shorelineKeys.has(getTileKey(neighbor))) {
         keys.add(getTileKey(waterTile));
         break;
       }
@@ -185,23 +194,12 @@ export function buildEgretPerchCandidates(
   const preferredShoreline = shoreline.filter((tile) => tile.castable && !tile.dock);
   const shorelineCandidates = preferredShoreline.length > 0 ? preferredShoreline : shoreline;
   const candidates: EgretPerchCandidate[] = [];
-  const sideNeighborSteps = [
-    { row: -1, col: 0 },
-    { row: 1, col: 0 },
-    { row: 0, col: -1 },
-    { row: 0, col: 1 },
-  ];
 
   for (const perchTile of shorelineCandidates) {
     const adjacentWater: Tile[] = [];
 
-    for (const step of sideNeighborSteps) {
-      const waterTile = waterByKey.get(
-        getTileKey({
-          row: perchTile.row + step.row,
-          col: perchTile.col + step.col,
-        }),
-      );
+    for (const neighbor of getHexNeighborTiles(perchTile)) {
+      const waterTile = waterByKey.get(getTileKey(neighbor));
 
       if (waterTile) {
         adjacentWater.push(waterTile);
@@ -421,22 +419,11 @@ export function buildShoreNeighborMap(shoreline: ShoreTile[]) {
   for (const tile of shoreline) {
     const adjacent: ShoreTile[] = [];
 
-    for (let rowStep = -1; rowStep <= 1; rowStep += 1) {
-      for (let colStep = -1; colStep <= 1; colStep += 1) {
-        if (rowStep === 0 && colStep === 0) {
-          continue;
-        }
+    for (const neighbor of getHexNeighborTiles(tile)) {
+      const nextTile = shorelineByKey.get(getTileKey(neighbor));
 
-        const nextTile = shorelineByKey.get(
-          getTileKey({
-            row: tile.row + rowStep,
-            col: tile.col + colStep,
-          }),
-        );
-
-        if (nextTile) {
-          adjacent.push(nextTile);
-        }
+      if (nextTile) {
+        adjacent.push(nextTile);
       }
     }
 

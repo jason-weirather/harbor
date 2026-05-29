@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -207,6 +208,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   const ambientRandomRef = useRef(createSeededRandom(`${manifest.pond.id}:ambient-school`));
   const egretRandomRef = useRef(createSeededRandom(`${manifest.pond.id}:egret`));
   const ambientEgretRef = useRef<AmbientEgret>();
+  const visibleEgretPerchCandidatesRef = useRef<EgretPerchCandidate[]>();
   const nextEgretVisitAtRef = useRef<number>();
   const egretVisitNumberRef = useRef(0);
   const movementRef = useRef<MovementPath>();
@@ -273,6 +275,9 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       ),
     [manifest.pond.mask, manifest.pond.shoreline, waterTiles],
   );
+  const handleEgretPerchCandidatesChange = useCallback((candidates: EgretPerchCandidate[]) => {
+    visibleEgretPerchCandidatesRef.current = candidates.length > 0 ? candidates : undefined;
+  }, []);
   const ambientFishTemplates = useMemo(
     () =>
       manifest.fish.map((fish) => ({
@@ -683,7 +688,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     setStatusMessage(catchStatus);
   }
 
-  function handleMoveToLand(tile: ShoreTile) {
+  function handleMoveToLand(tile: ShoreTile, visiblePath?: ShoreTile[]) {
     if (movementRef.current) {
       setStatusMessage("Let the fisher finish walking to the next bank tile first.");
       return;
@@ -695,7 +700,13 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       return;
     }
 
-    const path = findShorePath(currentTile, tile, shoreNeighborMap);
+    const path =
+      visiblePath &&
+      visiblePath.length > 0 &&
+      tileMatches(visiblePath[0], currentTile) &&
+      tileMatches(visiblePath.at(-1), tile)
+        ? visiblePath
+        : findShorePath(currentTile, tile, shoreNeighborMap);
     const now = performance.now();
     const currentEgret = ambientEgretRef.current;
     const pathTouchesEgret =
@@ -966,14 +977,18 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
           ? selectedWaterRef.current
           : undefined;
       let nextEgret = advanceAmbientEgretState(ambientEgretRef.current, now);
+      const currentEgretPerchCandidates =
+        visibleEgretPerchCandidatesRef.current?.length
+          ? visibleEgretPerchCandidatesRef.current
+          : egretPerchCandidates;
 
       if (
         !nextEgret &&
         typeof nextEgretVisitAtRef.current === "number" &&
         now >= nextEgretVisitAtRef.current &&
-        egretPerchCandidates.length > 0
+        currentEgretPerchCandidates.length > 0
       ) {
-        nextEgret = createAmbientEgretState(now, egretPerchCandidates);
+        nextEgret = createAmbientEgretState(now, currentEgretPerchCandidates);
       }
 
       const currentPlayerTile = playerTileRef.current;
@@ -1199,6 +1214,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
           approachDirection={approachDirectionRef.current}
           encounterFishScale={encounterFishScale}
           onMoveToLand={handleMoveToLand}
+          onEgretPerchCandidatesChange={handleEgretPerchCandidatesChange}
           onChooseWater={handleChooseWater}
           onHoverWater={setHoveredWaterTile}
         />

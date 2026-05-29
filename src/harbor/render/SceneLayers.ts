@@ -1,10 +1,17 @@
 import type { ShoreTile, Tile } from "../../lib/pond/types";
+import type { ScenePoint } from "./HarborRenderer";
+import { clamp, getDeterministicNoise } from "./palette";
 import type { HarborSpriteName } from "./SpriteAtlas";
 
-export type BackdropTerrain = "water" | "water-deep" | "sand" | "grass";
+export type BackdropTerrain = "water" | "water-deep" | "sand" | "dirt" | "grass";
 
 export interface BackdropTile extends Tile {
   terrain: BackdropTerrain;
+}
+
+export interface ResponsiveTerrainContext {
+  viewportHeight: number;
+  viewportWidth: number;
 }
 
 export type HarborSceneLayer =
@@ -88,24 +95,6 @@ export const SCENE_PROP_PLACEMENTS: ScenePropPlacement[] = [
     tile: { row: 10, col: 15 },
   },
   {
-    asset: "prop.bush.0",
-    id: "shore-bush",
-    layer: "props",
-    offsetX: 8,
-    offsetY: -10,
-    scale: 1,
-    tile: { row: 9, col: 13 },
-  },
-  {
-    asset: "prop.bush.0",
-    id: "lower-bush",
-    layer: "props",
-    offsetX: 4,
-    offsetY: -6,
-    scale: 0.96,
-    tile: { row: 12, col: 13 },
-  },
-  {
     asset: "prop.rock.0",
     id: "shore-rock",
     layer: "props",
@@ -141,26 +130,6 @@ export const SCENE_PROP_PLACEMENTS: ScenePropPlacement[] = [
     scale: 1,
     tile: { row: 4, col: 9 },
   },
-  {
-    asset: "prop.foreground.foliage.0",
-    id: "foreground-left",
-    layer: "foreground",
-    offsetX: -70,
-    offsetY: -16,
-    order: 8,
-    scale: 1.42,
-    tile: { row: 13, col: 10 },
-  },
-  {
-    asset: "prop.foreground.foliage.0",
-    id: "foreground-bottom",
-    layer: "foreground",
-    offsetX: -16,
-    offsetY: 16,
-    order: 9,
-    scale: 1.18,
-    tile: { row: 14, col: 12 },
-  },
 ];
 
 function getWaterEdgeByRow(mask: string[]) {
@@ -169,6 +138,81 @@ function getWaterEdgeByRow(mask: string[]) {
 
     return firstLandCol === -1 ? row.length : firstLandCol;
   });
+}
+
+function smoothstep(edge0: number, edge1: number, value: number) {
+  const progress = clamp((value - edge0) / Math.max(0.001, edge1 - edge0), 0, 1);
+
+  return progress * progress * (3 - 2 * progress);
+}
+
+function getShorelineNoise(tile: Tile) {
+  const broad = getDeterministicNoise(Math.floor(tile.row / 2), 4, 41) - 0.5;
+  const pocket = getDeterministicNoise(Math.floor(tile.row / 2), Math.floor(tile.col / 3), 47) - 0.5;
+  const notch = getDeterministicNoise(Math.floor(tile.row / 2), 13, 53);
+  const cape = getDeterministicNoise(Math.floor(tile.row / 5), 29, 59);
+
+  return broad * 0.09 + pocket * 0.045 + (notch > 0.76 ? -0.065 : 0) + (cape > 0.84 ? 0.04 : 0);
+}
+
+export function getResponsiveBackdropTerrain(
+  tile: Tile,
+  center: ScenePoint,
+  fallback: BackdropTerrain,
+  context: ResponsiveTerrainContext,
+): BackdropTerrain {
+  const x = center.x / context.viewportWidth;
+  const y = center.y / context.viewportHeight;
+  const isPortrait = context.viewportHeight > context.viewportWidth * 1.08;
+  const edgeNoise = getShorelineNoise(tile);
+
+  if (isPortrait) {
+    const leftBank = 0.125 + edgeNoise * 0.65;
+    const bottomShore = 0.79 - smoothstep(0.14, 0.92, x) * 0.06 + edgeNoise * 0.38;
+
+    if (x < leftBank - 0.072 || y > bottomShore + 0.115) {
+      return "grass";
+    }
+
+    if (x < leftBank - 0.038 || y > bottomShore + 0.065) {
+      return "dirt";
+    }
+
+    if (x < leftBank || y > bottomShore) {
+      return "sand";
+    }
+
+    if (x < leftBank + 0.035 || y > bottomShore - 0.038) {
+      return "water";
+    }
+
+    return y < 0.18 || x > 0.72 ? "water-deep" : fallback.startsWith("water") ? fallback : "water";
+  }
+
+  const bottomReach = smoothstep(0.74, 0.98, y);
+  const shoreX = 0.17 + bottomReach * 0.9 + edgeNoise;
+
+  if (x < shoreX - 0.13) {
+    return "grass";
+  }
+
+  if (x < shoreX - 0.074) {
+    return "dirt";
+  }
+
+  if (x < shoreX) {
+    return "sand";
+  }
+
+  if (x < shoreX + 0.042) {
+    return "water";
+  }
+
+  return x > 0.66 || y < 0.2 ? "water-deep" : fallback.startsWith("water") ? fallback : "water";
+}
+
+export function isLandTerrain(terrain: BackdropTerrain) {
+  return terrain === "sand" || terrain === "dirt" || terrain === "grass";
 }
 
 function getExtrapolatedWaterEdge(row: number, waterEdges: number[]) {
@@ -196,8 +240,12 @@ function getBackdropTerrain(row: number, col: number, waterEdges: number[]): Bac
   const waterEdge = getExtrapolatedWaterEdge(row, waterEdges);
   const grassEdgeNoise = ((row * 17 + col * 11) % 5) * 0.08;
 
-  if (col >= waterEdge + 3.15 + grassEdgeNoise) {
+  if (col >= waterEdge + 2.55 + grassEdgeNoise) {
     return "grass";
+  }
+
+  if (col >= waterEdge + 1.3 + grassEdgeNoise * 0.55) {
+    return "dirt";
   }
 
   if (col >= waterEdge - 0.2) {
@@ -210,10 +258,10 @@ function getBackdropTerrain(row: number, col: number, waterEdges: number[]): Bac
 export function buildBackdropTiles(mask: string[], shoreline: ShoreTile[]): BackdropTile[] {
   const tiles: BackdropTile[] = [];
   const waterEdges = getWaterEdgeByRow(mask);
-  const rowMin = -30;
-  const rowMax = mask.length + 26;
-  const colMax = Math.max(...mask.map((row) => row.length), 20) + 28;
-  const colMin = -28;
+  const rowMin = -44;
+  const rowMax = mask.length + 44;
+  const colMax = Math.max(...mask.map((row) => row.length), 20) + 44;
+  const colMin = -44;
 
   for (let row = rowMin; row <= rowMax; row += 1) {
     for (let col = colMin; col <= colMax; col += 1) {
@@ -226,12 +274,15 @@ export function buildBackdropTiles(mask: string[], shoreline: ShoreTile[]): Back
   }
 
   for (const tile of shoreline) {
-    const terrain = tile.dock ? "sand" : tile.terrain ?? "grass";
+    const terrain =
+      tile.dock || tile.terrain === "dock" || tile.terrain === "path"
+        ? "dirt"
+        : (tile.terrain ?? "grass");
 
     tiles.push({
       row: tile.row,
       col: tile.col,
-      terrain: terrain === "dock" || terrain === "path" ? "sand" : terrain,
+      terrain,
     });
   }
 

@@ -1,4 +1,5 @@
 import { BITE_DELAY_MS } from "../../lib/pond/game";
+import { getHexTileMetrics, getHexTilePointOffsets } from "../../lib/pond/geometry";
 import type { ShoreTile, Tile } from "../../lib/pond/types";
 import {
   CAST_ANIMATION_MS,
@@ -16,6 +17,7 @@ import {
 } from "../harborWidget.shared";
 import type { CanvasHarborFrame, ScenePoint } from "./HarborRenderer";
 import {
+  getResponsiveBackdropTerrain,
   SCENE_PROP_PLACEMENTS,
   type BackdropTerrain,
   type ScenePropPlacement,
@@ -72,7 +74,11 @@ function getTileFill(terrain: BackdropTerrain | ShoreTile["terrain"], dock?: boo
     return HARBOR_PALETTE.sand;
   }
 
-  if (terrain === "path") {
+  if (terrain === "dirt") {
+    return mixHex(HARBOR_PALETTE.path, HARBOR_PALETTE.wetSand, 0.24);
+  }
+
+  if (terrain === "dirt" || terrain === "path") {
     return HARBOR_PALETTE.path;
   }
 
@@ -83,21 +89,204 @@ function getTileFill(terrain: BackdropTerrain | ShoreTile["terrain"], dock?: boo
   return HARBOR_PALETTE.grass;
 }
 
-function drawDiamond(
+type TerrainKind = BackdropTerrain | ShoreTile["terrain"];
+
+const HEX_EDGE_NEIGHBOR_OFFSETS = [
+  { row: -1, col: -1 },
+  { row: 0, col: -1 },
+  { row: 1, col: 0 },
+  { row: 1, col: 1 },
+  { row: 0, col: 1 },
+  { row: -1, col: 0 },
+] as const;
+
+function getTerrainLift(
+  terrain: TerrainKind | undefined,
+  detailScale: number,
+  dock?: boolean,
+) {
+  if (terrain === "water" || terrain === "water-deep") {
+    return 0;
+  }
+
+  const elevationScale = clamp(detailScale / 1.2, 0.9, 1.15);
+
+  if (terrain === "sand") {
+    return 5 * elevationScale;
+  }
+
+  if (terrain === "dirt" || terrain === "path" || terrain === "dock" || dock) {
+    return 7 * elevationScale;
+  }
+
+  return 9 * elevationScale;
+}
+
+function getTerrainSideFill(terrain: TerrainKind | undefined, dock?: boolean) {
+  if (terrain === "sand") {
+    return "#bf995e";
+  }
+
+  if (terrain === "dirt" || terrain === "path" || terrain === "dock" || dock) {
+    return "#9b7045";
+  }
+
+  return "#4f8444";
+}
+
+function normalizeShoreTerrain(tile: ShoreTile): TerrainKind {
+  if (tile.dock) {
+    return "dirt";
+  }
+
+  return tile.terrain === "dock" || tile.terrain === "path" ? "dirt" : (tile.terrain ?? "grass");
+}
+
+function buildTerrainMap(frame: CanvasHarborFrame) {
+  const terrainMap = new Map<string, TerrainKind>();
+
+  for (const tile of frame.backdropTiles) {
+    terrainMap.set(
+      getTileKey(tile),
+      getResponsiveBackdropTerrain(tile, frame.projectSceneTile(tile), tile.terrain, frame.camera),
+    );
+  }
+
+  for (const tile of frame.manifest.pond.shoreline) {
+    terrainMap.set(getTileKey(tile), normalizeShoreTerrain(tile));
+  }
+
+  return terrainMap;
+}
+
+let cachedTerrainMap:
+  | {
+      key: string;
+      terrainMap: Map<string, TerrainKind>;
+    }
+  | undefined;
+
+function getTerrainMapCacheKey(frame: CanvasHarborFrame) {
+  return [
+    frame.manifest.pond.id,
+    frame.camera.viewportWidth,
+    frame.camera.viewportHeight,
+    frame.camera.origin.x.toFixed(2),
+    frame.camera.origin.y.toFixed(2),
+    frame.camera.tileSize.width.toFixed(2),
+    frame.camera.tileSize.height.toFixed(2),
+    frame.backdropTiles.length,
+    frame.waterTiles.length,
+    frame.manifest.pond.shoreline.length,
+  ].join("|");
+}
+
+function getCachedTerrainMap(frame: CanvasHarborFrame) {
+  const key = getTerrainMapCacheKey(frame);
+
+  if (cachedTerrainMap?.key === key) {
+    return cachedTerrainMap.terrainMap;
+  }
+
+  const terrainMap = buildTerrainMap(frame);
+  cachedTerrainMap = {
+    key,
+    terrainMap,
+  };
+
+  return terrainMap;
+}
+
+function getTerrainSideDrops(
+  tile: Tile,
+  lift: number,
+  terrainMap: Map<string, TerrainKind>,
+  detailScale: number,
+) {
+  return HEX_EDGE_NEIGHBOR_OFFSETS.map((offset) => {
+    const neighborKey = getTileKey({
+      row: tile.row + offset.row,
+      col: tile.col + offset.col,
+    });
+    const neighborTerrain = terrainMap.get(neighborKey);
+
+    if (!neighborTerrain) {
+      return 0;
+    }
+
+    return Math.max(0, lift - getTerrainLift(neighborTerrain, detailScale));
+  });
+}
+
+function getShoreTileLift(tile: ShoreTile, detailScale: number) {
+  return getTerrainLift(normalizeShoreTerrain(tile), detailScale, tile.dock);
+}
+
+function isShoreTile(tile: Tile | ShoreTile): tile is ShoreTile {
+  return "terrain" in tile || "dock" in tile || "castable" in tile;
+}
+
+function getSceneTileLift(frame: CanvasHarborFrame, tile: Tile | ShoreTile, detailScale: number) {
+  if (isShoreTile(tile)) {
+    return getShoreTileLift(tile, detailScale);
+  }
+
+  const shoreTile = frame.manifest.pond.shoreline.find((candidate) => tileMatches(candidate, tile));
+
+  return shoreTile ? getShoreTileLift(shoreTile, detailScale) : 0;
+}
+
+function projectRaisedLandTile(frame: CanvasHarborFrame, tile: Tile | ShoreTile, detailScale: number) {
+  const center = frame.projectSceneTile(tile);
+
+  return {
+    x: center.x,
+    y: center.y - getSceneTileLift(frame, tile, detailScale),
+  };
+}
+
+function getHexPoints(
+  centerX: number,
+  centerY: number,
+  pointOffsets: readonly { x: number; y: number }[],
+) {
+  return pointOffsets.map((point) => ({
+    x: centerX + point.x,
+    y: centerY + point.y,
+  }));
+}
+
+function drawPolygon(ctx: CanvasRenderingContext2D, points: { x: number; y: number }[], fill: string) {
+  ctx.beginPath();
+  ctx.moveTo(Math.round(points[0].x), Math.round(points[0].y));
+
+  for (const point of points.slice(1)) {
+    ctx.lineTo(Math.round(point.x), Math.round(point.y));
+  }
+
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+function drawHexTile(
   ctx: CanvasRenderingContext2D,
   centerX: number,
   centerY: number,
-  halfWidth: number,
-  halfHeight: number,
+  pointOffsets: readonly { x: number; y: number }[],
   fill: string | CanvasGradient,
   stroke: string,
   lineWidth = 1,
 ) {
+  const points = getHexPoints(centerX, centerY, pointOffsets);
+
   ctx.beginPath();
-  ctx.moveTo(Math.round(centerX), Math.round(centerY - halfHeight));
-  ctx.lineTo(Math.round(centerX + halfWidth), Math.round(centerY));
-  ctx.lineTo(Math.round(centerX), Math.round(centerY + halfHeight));
-  ctx.lineTo(Math.round(centerX - halfWidth), Math.round(centerY));
+  ctx.moveTo(Math.round(points[0].x), Math.round(points[0].y));
+
+  for (const point of points.slice(1)) {
+    ctx.lineTo(Math.round(point.x), Math.round(point.y));
+  }
+
   ctx.closePath();
   ctx.fillStyle = fill;
   ctx.fill();
@@ -109,7 +298,82 @@ function drawDiamond(
   }
 }
 
-function isDiamondInViewport(
+function drawRaisedHexTile(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  pointOffsets: readonly { x: number; y: number }[],
+  fill: string | CanvasGradient,
+  stroke: string,
+  lineWidth: number,
+  lift: number,
+  sideFill: string,
+  sideDrops: readonly number[],
+) {
+  if (lift > 0.5) {
+    const top = getHexPoints(centerX, centerY - lift, pointOffsets);
+
+    sideDrops.forEach((drop, edgeIndex) => {
+      if (drop <= 0.5) {
+        return;
+      }
+
+      const nextIndex = (edgeIndex + 1) % top.length;
+      const bottomA = {
+        x: top[edgeIndex].x,
+        y: top[edgeIndex].y + drop,
+      };
+      const bottomB = {
+        x: top[nextIndex].x,
+        y: top[nextIndex].y + drop,
+      };
+      const shadedSideFill =
+        edgeIndex >= 2 && edgeIndex <= 3
+          ? mixHex(sideFill, "#203f45", 0.22)
+          : edgeIndex === 4
+            ? mixHex(sideFill, "#fff6d8", 0.08)
+            : sideFill;
+
+      drawPolygon(ctx, [top[edgeIndex], top[nextIndex], bottomB, bottomA], shadedSideFill);
+      ctx.save();
+      ctx.strokeStyle =
+        edgeIndex >= 2 && edgeIndex <= 3
+          ? "rgba(32, 54, 42, 0.2)"
+          : "rgba(255, 247, 210, 0.1)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(bottomA.x), Math.round(bottomA.y));
+      ctx.lineTo(Math.round(bottomB.x), Math.round(bottomB.y));
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  drawHexTile(ctx, centerX, centerY - lift, pointOffsets, fill, stroke, lineWidth);
+
+  if (lift > 0.5) {
+    const top = getHexPoints(centerX, centerY - lift, pointOffsets);
+
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 250, 218, 0.18)";
+    ctx.beginPath();
+    ctx.moveTo(Math.round(top[4].x), Math.round(top[4].y));
+    ctx.lineTo(Math.round(top[5].x), Math.round(top[5].y));
+    ctx.lineTo(Math.round(top[0].x), Math.round(top[0].y));
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(38, 55, 44, 0.14)";
+    ctx.beginPath();
+    ctx.moveTo(Math.round(top[1].x), Math.round(top[1].y));
+    ctx.lineTo(Math.round(top[2].x), Math.round(top[2].y));
+    ctx.lineTo(Math.round(top[3].x), Math.round(top[3].y));
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function isHexInViewport(
   frame: CanvasHarborFrame,
   centerX: number,
   centerY: number,
@@ -294,11 +558,15 @@ function drawWaterTileDetails(
   detailScale: number,
   deep = false,
 ) {
-  const density = deep ? 0.82 : 0.96;
+  const density = deep ? 0.42 : 0.64;
   const first = getDeterministicNoise(variant, 2, 9);
   const second = getDeterministicNoise(variant, 7, 12);
   const pixel = Math.max(1, Math.round(detailScale * 0.52));
-  const currentPhase = ((time / 54 + variant * 3.7) % 38) - 19;
+  const currentPhase = ((time / 34 + variant * 3.7) % 38) - 19;
+
+  if (deep && first < 0.26) {
+    return;
+  }
 
   drawWaterRippleSprite(
     ctx,
@@ -311,7 +579,7 @@ function drawWaterTileDetails(
     density,
   );
 
-  if (second > 0.3) {
+  if (second > 0.62) {
     drawWaterRippleSprite(
       ctx,
       "fx.ripple.0",
@@ -324,8 +592,8 @@ function drawWaterTileDetails(
     );
   }
 
-  if (first > 0.36) {
-    const alpha = (deep ? 0.2 : 0.32) + Math.max(0, Math.sin(time / 440 + variant)) * 0.22;
+  if (first > 0.5) {
+    const alpha = (deep ? 0.12 : 0.24) + Math.max(0, Math.sin(time / 320 + variant)) * 0.14;
     const brightCurrent = `rgba(222, 255, 248, ${alpha})`;
     const tealCurrent = `rgba(78, 195, 207, ${alpha * 0.72})`;
 
@@ -1042,14 +1310,24 @@ function drawNamedSprite(
 }
 
 function getWaterFill(tile: Tile, isNearShore: boolean, variant: number) {
-  const offshoreDepth = clamp((8.8 - tile.col + tile.row * 0.03) / 14, 0, 1);
-  const patch = getDeterministicNoise(Math.floor(tile.row / 4), Math.floor(tile.col / 4), 8);
-  const deepened = clamp(offshoreDepth * 0.58 + patch * 0.035 - (isNearShore ? 0.2 : 0), 0, 1);
-  const base = mixHex(HARBOR_PALETTE.waterMid, HARBOR_PALETTE.waterDeep, deepened);
-  const surface = mixHex(base, HARBOR_PALETTE.waterNight, patch > 0.72 ? 0.06 : 0.025);
+  const offshoreDepth = clamp((9.4 - tile.col + tile.row * 0.035) / 15.5, 0, 1);
+  const broadPatch = getDeterministicNoise(Math.floor(tile.row / 7), Math.floor(tile.col / 7), 8);
+  const shelfPatch = getDeterministicNoise(Math.floor(tile.row / 5), Math.floor(tile.col / 6), 24);
+  const currentPatch = getDeterministicNoise(variant, 17, 31);
+  const deepened = clamp(
+    offshoreDepth * 0.68 +
+      broadPatch * 0.18 +
+      shelfPatch * 0.08 +
+      currentPatch * 0.035 -
+      (isNearShore ? 0.36 : 0.03),
+    0,
+    1,
+  );
+  const base = mixHex(HARBOR_PALETTE.waterShallow, HARBOR_PALETTE.waterDeep, deepened);
+  const surface = mixHex(base, HARBOR_PALETTE.waterNight, deepened * 0.12 + (broadPatch > 0.76 ? 0.05 : 0));
 
   if (isNearShore) {
-    return mixHex(surface, HARBOR_PALETTE.waterShallow, 0.3 + (variant % 3) * 0.012);
+    return mixHex(surface, "#63d2cc", 0.26 + (variant % 3) * 0.018);
   }
 
   return surface;
@@ -1057,50 +1335,64 @@ function getWaterFill(tile: Tile, isNearShore: boolean, variant: number) {
 
 function drawBackground(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame) {
   const gradient = ctx.createLinearGradient(0, 0, frame.camera.viewportWidth, frame.camera.viewportHeight);
-  gradient.addColorStop(0, mixHex(HARBOR_PALETTE.waterMid, HARBOR_PALETTE.waterShallow, 0.2));
+  gradient.addColorStop(0, mixHex(HARBOR_PALETTE.waterMid, HARBOR_PALETTE.waterShallow, 0.12));
   gradient.addColorStop(0.52, HARBOR_PALETTE.waterMid);
-  gradient.addColorStop(1, mixHex(HARBOR_PALETTE.waterDeep, HARBOR_PALETTE.waterNight, 0.22));
+  gradient.addColorStop(1, mixHex(HARBOR_PALETTE.waterDeep, HARBOR_PALETTE.waterNight, 0.32));
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, frame.camera.viewportWidth, frame.camera.viewportHeight);
 }
 
-function drawBackdrop(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, detailScale: number) {
-  const halfWidth = frame.camera.tileSize.width / 2;
-  const halfHeight = frame.camera.tileSize.height / 2;
+function drawBackdrop(
+  ctx: CanvasRenderingContext2D,
+  frame: CanvasHarborFrame,
+  detailScale: number,
+  terrainMap: Map<string, TerrainKind>,
+) {
+  const tileMetrics = getHexTileMetrics(frame.camera.tileSize);
+  const tilePointOffsets = getHexTilePointOffsets(frame.camera.tileSize);
+  const halfWidth = tileMetrics.halfWidth;
+  const halfHeight = tileMetrics.halfHeight;
 
   for (const tile of frame.backdropTiles) {
     const center = frame.projectSceneTile(tile);
-    const isWater = tile.terrain.startsWith("water");
+    const terrain = terrainMap.get(getTileKey(tile)) ?? tile.terrain;
+    const isWater = terrain.startsWith("water");
     const variant = tile.row + tile.col;
 
-    if (!isDiamondInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width * 2)) {
+    if (!isHexInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width * 2)) {
       continue;
     }
 
     if (isWater) {
+      const isNearShore = frame.nearShoreWaterKeys.has(getTileKey(tile));
+
       ctx.save();
       ctx.globalAlpha = 0.72;
-      drawDiamond(
+      drawHexTile(
         ctx,
         center.x,
         center.y,
-        halfWidth,
-        halfHeight,
-        getWaterFill(tile, tile.terrain === "water", variant),
+        tilePointOffsets,
+        getWaterFill(tile, isNearShore, variant),
         "rgba(64, 163, 181, 0)",
         0,
       );
       ctx.restore();
     } else {
-      drawDiamond(
+      const lift = getTerrainLift(terrain, detailScale);
+      const sideDrops = getTerrainSideDrops(tile, lift, terrainMap, detailScale);
+
+      drawRaisedHexTile(
         ctx,
         center.x,
         center.y,
-        halfWidth,
-        halfHeight,
-        getTileFill(tile.terrain),
+        tilePointOffsets,
+        getTileFill(terrain),
         "rgba(62, 98, 59, 0.18)",
         0.8,
+        lift,
+        getTerrainSideFill(terrain),
+        sideDrops,
       );
     }
 
@@ -1113,21 +1405,36 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, d
           frame.time * 0.9,
           variant,
           detailScale * 0.82,
-          tile.terrain === "water-deep",
+          terrain === "water-deep",
         );
       }
     } else {
-      drawGroundTileDetails(ctx, center.x, center.y, tile.terrain, variant, detailScale);
+      const lift = getTerrainLift(terrain, detailScale);
+
+      drawGroundTileDetails(ctx, center.x, center.y - lift, terrain, variant, detailScale);
     }
   }
 }
 
-function drawWater(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, detailScale: number) {
-  const halfWidth = frame.camera.tileSize.width / 2;
-  const halfHeight = frame.camera.tileSize.height / 2;
+function drawWater(
+  ctx: CanvasRenderingContext2D,
+  frame: CanvasHarborFrame,
+  detailScale: number,
+  terrainMap: Map<string, TerrainKind>,
+) {
+  const tileMetrics = getHexTileMetrics(frame.camera.tileSize);
+  const tilePointOffsets = getHexTilePointOffsets(frame.camera.tileSize);
+  const halfWidth = tileMetrics.halfWidth;
+  const halfHeight = tileMetrics.halfHeight;
 
   for (const tile of frame.waterTiles) {
     const center = frame.projectSceneTile(tile);
+    const terrain = terrainMap.get(getTileKey(tile));
+
+    if (!terrain?.startsWith("water")) {
+      continue;
+    }
+
     const isHovered = tileMatches(tile, frame.hoveredWaterTile);
     const isSelected = tileMatches(tile, frame.selectedWaterTile);
     const isInRange = isTileWithinCastRange(frame.playerTile, tile);
@@ -1142,18 +1449,17 @@ function drawWater(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, deta
           : "rgba(239, 68, 68, 0.42)"
         : normalStroke;
 
-    if (!isDiamondInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width)) {
+    if (!isHexInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width)) {
       continue;
     }
 
     ctx.save();
-    ctx.globalAlpha = isHovered || isSelected ? 0.96 : 0.84;
-    drawDiamond(
+    ctx.globalAlpha = isHovered || isSelected ? 0.98 : 0.93;
+    drawHexTile(
       ctx,
       center.x,
       center.y,
-      halfWidth,
-      halfHeight,
+      tilePointOffsets,
       fill,
       stroke,
       isHovered || isSelected ? 1.4 : 0,
@@ -1177,45 +1483,46 @@ function drawWater(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, deta
   }
 }
 
-function drawShore(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, detailScale: number) {
-  const halfWidth = frame.camera.tileSize.width / 2;
-  const halfHeight = frame.camera.tileSize.height / 2;
+function drawShore(
+  ctx: CanvasRenderingContext2D,
+  frame: CanvasHarborFrame,
+  detailScale: number,
+  terrainMap: Map<string, TerrainKind>,
+) {
+  const tileMetrics = getHexTileMetrics(frame.camera.tileSize);
+  const tilePointOffsets = getHexTilePointOffsets(frame.camera.tileSize);
+  const halfWidth = tileMetrics.halfWidth;
+  const halfHeight = tileMetrics.halfHeight;
 
   for (const tile of frame.manifest.pond.shoreline) {
     const center = frame.projectSceneTile(tile);
     const isPlayer = tileMatches(tile, frame.playerTile);
-    const shoreTerrain = tile.dock ? "path" : tile.terrain;
+    const shoreTerrain = normalizeShoreTerrain(tile);
     const tileFill = getTileFill(shoreTerrain, tile.dock);
-    const shadowFill = shoreTerrain === "path" ? "#ad8759" : "#557b46";
+    const lift = getShoreTileLift(tile, detailScale);
+    const tileTopY = center.y - lift;
+    const sideDrops = getTerrainSideDrops(tile, lift, terrainMap, detailScale);
 
-    if (!isDiamondInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width)) {
+    if (!isHexInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width)) {
       continue;
     }
 
-    drawDiamond(
-      ctx,
-      center.x,
-      center.y + 2,
-      halfWidth,
-      halfHeight,
-      shadowFill,
-      "rgba(36, 67, 55, 0.18)",
-      0.7,
-    );
-    drawDiamond(
+    drawRaisedHexTile(
       ctx,
       center.x,
       center.y,
-      halfWidth,
-      halfHeight,
+      tilePointOffsets,
       tileFill,
       isPlayer ? "rgba(23, 50, 74, 0.58)" : "rgba(74, 101, 65, 0.22)",
       isPlayer ? 1.2 : 0.65,
+      lift,
+      getTerrainSideFill(shoreTerrain, tile.dock),
+      sideDrops,
     );
-    drawGroundTileDetails(ctx, center.x, center.y, shoreTerrain, tile.row + tile.col, detailScale);
+    drawGroundTileDetails(ctx, center.x, tileTopY, shoreTerrain, tile.row + tile.col, detailScale);
 
     if (shoreTerrain === "grass") {
-      drawBrokenGrassEdge(ctx, center.x, center.y + halfHeight * 0.18, detailScale, tile.row + tile.col);
+      drawBrokenGrassEdge(ctx, center.x, tileTopY + halfHeight * 0.18, detailScale, tile.row + tile.col);
     }
   }
 }
@@ -1240,11 +1547,11 @@ function getScaledPropScale(prop: ScenePropPlacement, detailScale: number) {
   return Math.max(1.24, Math.min(1.9, detailScale * 0.34)) * prop.scale;
 }
 
-function getAnimatedPlayerCenter(frame: CanvasHarborFrame, time: number): {
+function getAnimatedPlayerCenter(frame: CanvasHarborFrame, time: number, detailScale: number): {
   center: ScenePoint;
   mode: HarborGameMode;
 } {
-  let center = frame.projectSceneTile(frame.playerTile);
+  let center = projectRaisedLandTile(frame, frame.playerTile, detailScale);
   let mode = frame.gameState;
 
   if (frame.movement && frame.movement.tiles.length > 1) {
@@ -1253,9 +1560,11 @@ function getAnimatedPlayerCenter(frame: CanvasHarborFrame, time: number): {
     const pathProgress = Math.min(totalSegments, elapsed / frame.movement.segmentDuration);
     const segmentIndex = Math.min(totalSegments - 1, Math.floor(pathProgress));
     const localProgress = easeInOut(Math.min(1, Math.max(0, pathProgress - segmentIndex)));
-    const fromCenter = frame.projectSceneTile(frame.movement.tiles[segmentIndex]);
-    const toCenter = frame.projectSceneTile(
+    const fromCenter = projectRaisedLandTile(frame, frame.movement.tiles[segmentIndex], detailScale);
+    const toCenter = projectRaisedLandTile(
+      frame,
       frame.movement.tiles[segmentIndex + 1] ?? frame.movement.tiles[segmentIndex],
+      detailScale,
     );
 
     center = {
@@ -1268,8 +1577,8 @@ function getAnimatedPlayerCenter(frame: CanvasHarborFrame, time: number): {
   return { center, mode };
 }
 
-function getEgretPose(egret: AmbientEgret, frame: CanvasHarborFrame): EgretRenderPose {
-  const perchCenter = frame.projectSceneTile(egret.perchTile);
+function getEgretPose(egret: AmbientEgret, frame: CanvasHarborFrame, detailScale: number): EgretRenderPose {
+  const perchCenter = projectRaisedLandTile(frame, egret.perchTile, detailScale);
   const targetCenter = frame.projectSceneTile(egret.targetWaterTile);
   const waterDirection = targetCenter.x >= perchCenter.x ? 1 : -1;
   const perchPoint = {
@@ -1647,18 +1956,24 @@ export function drawCanvasHarborFrame(ctx: CanvasRenderingContext2D, frame: Canv
       : frame.gameState === "casting"
         ? 1
         : 0;
-  const player = getAnimatedPlayerCenter(frame, frame.time);
+  const terrainMap = getCachedTerrainMap(frame);
+  const player = getAnimatedPlayerCenter(frame, frame.time, detailScale);
   const drawables: SceneDrawable[] = [];
 
   ctx.clearRect(0, 0, frame.camera.viewportWidth, frame.camera.viewportHeight);
   ctx.imageSmoothingEnabled = false;
   drawBackground(ctx, frame);
-  drawBackdrop(ctx, frame, detailScale);
-  drawWater(ctx, frame, detailScale);
-  drawShore(ctx, frame, detailScale);
+  drawBackdrop(ctx, frame, detailScale, terrainMap);
+  drawWater(ctx, frame, detailScale, terrainMap);
+  drawShore(ctx, frame, detailScale, terrainMap);
 
   for (const prop of SCENE_PROP_PLACEMENTS) {
-    const center = frame.projectSceneTile(prop.tile);
+    const baseCenter = frame.projectSceneTile(prop.tile);
+    const lift = prop.asset === "prop.reeds.0" ? 0 : getSceneTileLift(frame, prop.tile, detailScale);
+    const center = {
+      x: baseCenter.x,
+      y: baseCenter.y - lift,
+    };
     drawables.push({
       id: prop.id,
       layer: prop.layer,
@@ -1707,7 +2022,7 @@ export function drawCanvasHarborFrame(ctx: CanvasRenderingContext2D, frame: Canv
   }
 
   if (frame.ambientEgret) {
-    const pose = getEgretPose(frame.ambientEgret, frame);
+    const pose = getEgretPose(frame.ambientEgret, frame, detailScale);
     const egretScale = Math.max(1.28, Math.min(1.95, detailScale * 0.31));
     drawables.push({
       id: frame.ambientEgret.id,

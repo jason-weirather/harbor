@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CAST_RANGE_TILES } from "../lib/pond/game";
-import { getPlayableTiles, projectTile } from "../lib/pond/geometry";
+import { getHexTileMetrics, getPlayableTiles, projectTile } from "../lib/pond/geometry";
 import type {
   CatchInstance,
   PondManifest,
@@ -11,16 +11,30 @@ import type {
   TileSize,
 } from "../lib/pond/types";
 import type { HarborArtifact } from "./HarborWidget.types";
-import type { AmbientEgret, AmbientFish, HarborGameMode, MovementPath } from "./harborWidget.shared";
+import type {
+  AmbientEgret,
+  AmbientFish,
+  EgretPerchCandidate,
+  HarborGameMode,
+  MovementPath,
+} from "./harborWidget.shared";
 import {
+  buildEgretPerchCandidates,
+  buildShoreNeighborMap,
   buildNearShoreWaterKeys,
+  findShorePath,
   getTileKey,
   isTileWithinCastRange,
   tileMatches,
 } from "./harborWidget.shared";
 import { drawCanvasHarborFrame } from "./render/CanvasHarborRenderer";
 import type { HarborCamera } from "./render/HarborRenderer";
-import { buildBackdropTiles } from "./render/SceneLayers";
+import {
+  buildBackdropTiles,
+  getResponsiveBackdropTerrain,
+  isLandTerrain,
+  type BackdropTerrain,
+} from "./render/SceneLayers";
 
 interface FishingSceneProps {
   activeCatchPreview?: CatchInstance;
@@ -35,8 +49,9 @@ interface FishingSceneProps {
   manifest: PondManifest<HarborArtifact>;
   movement?: MovementPath;
   onChooseWater: (tile: Tile) => void;
+  onEgretPerchCandidatesChange?: (candidates: EgretPerchCandidate[]) => void;
   onHoverWater: (tile?: Tile) => void;
-  onMoveToLand: (tile: ShoreTile) => void;
+  onMoveToLand: (tile: ShoreTile, path?: ShoreTile[]) => void;
   playerTile: ShoreTile;
   reelDuration: number;
   reelingStartedAt?: number;
@@ -68,8 +83,7 @@ function getProjectedBounds(
   tileSize: TileSize,
   origin: TileOrigin = { x: 0, y: 0 },
 ) {
-  const halfWidth = tileSize.width / 2;
-  const halfHeight = tileSize.height / 2;
+  const metrics = getHexTileMetrics(tileSize);
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -77,10 +91,10 @@ function getProjectedBounds(
 
   for (const tile of tiles) {
     const center = projectTile(tile, tileSize, origin);
-    minX = Math.min(minX, center.x - halfWidth);
-    maxX = Math.max(maxX, center.x + halfWidth);
-    minY = Math.min(minY, center.y - halfHeight);
-    maxY = Math.max(maxY, center.y + halfHeight);
+    minX = Math.min(minX, center.x - metrics.halfWidth);
+    maxX = Math.max(maxX, center.x + metrics.halfWidth);
+    minY = Math.min(minY, center.y - metrics.halfHeight);
+    maxY = Math.max(maxY, center.y + metrics.halfHeight);
   }
 
   return {
@@ -91,6 +105,29 @@ function getProjectedBounds(
     width: maxX - minX,
     height: maxY - minY,
   };
+}
+
+function isProjectedTileVisible(
+  center: { x: number; y: number },
+  metrics: ReturnType<typeof getHexTileMetrics>,
+  viewportWidth: number,
+  viewportHeight: number,
+  margin: number,
+) {
+  return (
+    center.x + metrics.halfWidth >= -margin &&
+    center.x - metrics.halfWidth <= viewportWidth + margin &&
+    center.y + metrics.halfHeight >= -margin &&
+    center.y - metrics.halfHeight <= viewportHeight + margin
+  );
+}
+
+function toWalkableTerrain(terrain: BackdropTerrain): ShoreTile["terrain"] {
+  if (terrain === "grass" || terrain === "sand") {
+    return terrain;
+  }
+
+  return "path";
 }
 
 export default function FishingScene({
@@ -110,32 +147,20 @@ export default function FishingScene({
   approachDirection,
   encounterFishScale,
   onMoveToLand,
+  onEgretPerchCandidatesChange,
   onChooseWater,
   onHoverWater,
 }: FishingSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const waterTiles = useMemo(() => getPlayableTiles(manifest.pond.mask), [manifest.pond.mask]);
-  const nearShoreWaterKeys = useMemo(
-    () => buildNearShoreWaterKeys(waterTiles, manifest.pond.shoreline),
-    [manifest.pond.shoreline, waterTiles],
-  );
-  const nearShoreWaterTiles = useMemo(
-    () => waterTiles.filter((tile) => nearShoreWaterKeys.has(getTileKey(tile))),
-    [nearShoreWaterKeys, waterTiles],
-  );
-  const defaultPlayerTile = useMemo<ShoreTile>(
+  const focusTile = useMemo<ShoreTile>(
     () =>
       manifest.pond.shoreline.find((tile) => tile.dock) ??
+      manifest.pond.shoreline.find((tile) => tile.row === 6 && tile.col === 11) ??
       manifest.pond.shoreline.find((tile) => tile.castable) ??
       manifest.pond.shoreline[0],
     [manifest.pond.shoreline],
-  );
-  const focusTile = useMemo<Tile>(
-    () =>
-      manifest.pond.shoreline.find((tile) => tile.row === 6 && tile.col === 11) ??
-      defaultPlayerTile,
-    [defaultPlayerTile, manifest.pond.shoreline],
   );
   const backdropTiles = useMemo(
     () => buildBackdropTiles(manifest.pond.mask, manifest.pond.shoreline),
@@ -182,21 +207,26 @@ export default function FishingScene({
   const sceneHeight = sceneSize.height > 0 ? sceneSize.height : manifest.pond.viewBox.height;
   const camera = useMemo<HarborCamera>(() => {
     const safeBottom = Math.max(18, sceneHeight * 0.035);
+    const isPortrait = sceneHeight > sceneWidth * 1.08;
     const baseScale =
       Math.max(
         sceneWidth / manifest.pond.viewBox.width,
         sceneHeight / manifest.pond.viewBox.height,
-      ) * 1.42;
+      ) * (isPortrait ? 0.42 : 0.44);
     const tileSize = {
       width: manifest.pond.tile.width * baseScale,
       height: manifest.pond.tile.height * baseScale,
     };
+    const tileMetrics = getHexTileMetrics(tileSize);
     const focusBounds = getProjectedBounds([focusTile], tileSize);
-    const desiredPlayerX = sceneWidth * 0.24;
-    const desiredPlayerY = sceneHeight - safeBottom - tileSize.height * 2;
+    const desiredFocusX = sceneWidth * (isPortrait ? 0.24 : 0.16);
+    const desiredFocusY = Math.min(
+      sceneHeight - safeBottom - tileMetrics.height * 2,
+      sceneHeight * (isPortrait ? 0.84 : 0.72),
+    );
     const origin = {
-      x: desiredPlayerX - (focusBounds.minX + tileSize.width / 2),
-      y: desiredPlayerY - (focusBounds.minY + tileSize.height / 2),
+      x: desiredFocusX - (focusBounds.minX + tileMetrics.halfWidth),
+      y: desiredFocusY - (focusBounds.minY + tileMetrics.halfHeight),
     };
     const reservedZones = manifest.pond.reservedZones.map((zone) => ({
       ...zone,
@@ -226,6 +256,116 @@ export default function FishingScene({
     () => (tile: Tile) => projectTile(tile, camera.tileSize, camera.origin),
     [camera.origin, camera.tileSize],
   );
+  const hotspotMetrics = useMemo(() => getHexTileMetrics(camera.tileSize), [camera.tileSize]);
+  const visibleLandTiles = useMemo<ShoreTile[]>(() => {
+    const landByKey = new Map<string, ShoreTile>();
+    const margin = Math.max(24, camera.tileSize.width * 1.25);
+
+    for (const tile of backdropTiles) {
+      const center = projectSceneTile(tile);
+
+      if (
+        !isProjectedTileVisible(
+          center,
+          hotspotMetrics,
+          camera.viewportWidth,
+          camera.viewportHeight,
+          margin,
+        )
+      ) {
+        continue;
+      }
+
+      const terrain = getResponsiveBackdropTerrain(tile, center, tile.terrain, camera);
+
+      if (!isLandTerrain(terrain)) {
+        continue;
+      }
+
+      landByKey.set(getTileKey(tile), {
+        row: tile.row,
+        col: tile.col,
+        terrain: toWalkableTerrain(terrain),
+        castable: true,
+      });
+    }
+
+    for (const tile of manifest.pond.shoreline) {
+      const center = projectSceneTile(tile);
+
+      if (
+        isProjectedTileVisible(
+          center,
+          hotspotMetrics,
+          camera.viewportWidth,
+          camera.viewportHeight,
+          margin,
+        ) ||
+        tileMatches(tile, playerTile)
+      ) {
+        landByKey.set(getTileKey(tile), tile);
+      }
+    }
+
+    landByKey.set(getTileKey(playerTile), playerTile);
+
+    return [...landByKey.values()];
+  }, [
+    backdropTiles,
+    camera,
+    hotspotMetrics,
+    manifest.pond.shoreline,
+    playerTile,
+    projectSceneTile,
+  ]);
+  const visibleLandNeighborMap = useMemo(
+    () => buildShoreNeighborMap(visibleLandTiles),
+    [visibleLandTiles],
+  );
+  const responsiveWaterTileKeys = useMemo(() => {
+    const waterKeys = new Set<string>();
+    const margin = Math.max(24, camera.tileSize.width);
+
+    for (const tile of waterTiles) {
+      const center = projectSceneTile(tile);
+
+      if (
+        !isProjectedTileVisible(
+          center,
+          hotspotMetrics,
+          camera.viewportWidth,
+          camera.viewportHeight,
+          margin,
+        )
+      ) {
+        continue;
+      }
+
+      const terrain = getResponsiveBackdropTerrain(tile, center, "water", camera);
+
+      if (terrain === "water" || terrain === "water-deep") {
+        waterKeys.add(getTileKey(tile));
+      }
+    }
+
+    return waterKeys;
+  }, [camera, hotspotMetrics, projectSceneTile, waterTiles]);
+  const responsiveWaterTiles = useMemo(
+    () => waterTiles.filter((tile) => responsiveWaterTileKeys.has(getTileKey(tile))),
+    [responsiveWaterTileKeys, waterTiles],
+  );
+  const visibleEgretPerchCandidates = useMemo(
+    () => buildEgretPerchCandidates(visibleLandTiles, responsiveWaterTiles),
+    [responsiveWaterTiles, visibleLandTiles],
+  );
+  const nearShoreWaterKeys = useMemo(
+    () => buildNearShoreWaterKeys(waterTiles, visibleLandTiles),
+    [visibleLandTiles, waterTiles],
+  );
+  const nearShoreWaterTiles = useMemo(
+    () => waterTiles.filter((tile) => nearShoreWaterKeys.has(getTileKey(tile))),
+    [nearShoreWaterKeys, waterTiles],
+  );
   const tileIsReserved = (tile: Tile, kind: "land" | "water") =>
     isTileInsideReservedZone(tile, kind, camera.tileSize, camera.origin, camera.reservedZones);
   const activeWaterTile = hoveredWaterTile ?? selectedWaterTile;
@@ -243,6 +383,10 @@ export default function FishingScene({
       : activeWaterInRange;
 
   useEffect(() => {
+    onEgretPerchCandidatesChange?.(visibleEgretPerchCandidates);
+  }, [onEgretPerchCandidatesChange, visibleEgretPerchCandidates]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
 
     if (!canvas) {
@@ -255,6 +399,10 @@ export default function FishingScene({
     if (!ctx) {
       return undefined;
     }
+
+    const shouldAnimate =
+      typeof window.navigator.userAgent !== "string" ||
+      !window.navigator.userAgent.toLowerCase().includes("jsdom");
 
     const draw = (time: number) => {
       drawCanvasHarborFrame(ctx, {
@@ -283,7 +431,9 @@ export default function FishingScene({
         waterTiles,
       });
 
-      rafId = window.requestAnimationFrame(draw);
+      if (shouldAnimate) {
+        rafId = window.requestAnimationFrame(draw);
+      }
     };
 
     rafId = window.requestAnimationFrame(draw);
@@ -329,7 +479,7 @@ export default function FishingScene({
         width={camera.viewportWidth}
       />
       <div className="harbor-widget__hotspots" aria-hidden="true">
-        {manifest.pond.shoreline.map((tile) => {
+        {visibleLandTiles.map((tile) => {
           const center = projectSceneTile(tile);
           const isReserved = tileIsReserved(tile, "land");
 
@@ -338,13 +488,16 @@ export default function FishingScene({
               className="harbor-widget__hotspot harbor-widget__hotspot--land"
               data-testid={`shore-${tile.row}-${tile.col}`}
               key={`shore-${tile.row}-${tile.col}`}
-              onClick={() => !isReserved && onMoveToLand(tile)}
+              onClick={() =>
+                !isReserved &&
+                onMoveToLand(tile, findShorePath(playerTile, tile, visibleLandNeighborMap))
+              }
               style={
                 {
                   "--hotspot-left": `${center.x}px`,
                   "--hotspot-top": `${center.y}px`,
-                  "--hotspot-width": `${camera.tileSize.width}px`,
-                  "--hotspot-height": `${camera.tileSize.height}px`,
+                  "--hotspot-width": `${hotspotMetrics.width}px`,
+                  "--hotspot-height": `${hotspotMetrics.height}px`,
                 } as CSSProperties
               }
               tabIndex={-1}
@@ -353,6 +506,10 @@ export default function FishingScene({
           );
         })}
         {waterTiles.map((tile) => {
+          if (!responsiveWaterTileKeys.has(getTileKey(tile))) {
+            return null;
+          }
+
           const center = projectSceneTile(tile);
           const isReserved = tileIsReserved(tile, "water");
 
@@ -378,8 +535,8 @@ export default function FishingScene({
                 {
                   "--hotspot-left": `${center.x}px`,
                   "--hotspot-top": `${center.y}px`,
-                  "--hotspot-width": `${camera.tileSize.width}px`,
-                  "--hotspot-height": `${camera.tileSize.height}px`,
+                  "--hotspot-width": `${hotspotMetrics.width}px`,
+                  "--hotspot-height": `${hotspotMetrics.height}px`,
                 } as CSSProperties
               }
               tabIndex={-1}

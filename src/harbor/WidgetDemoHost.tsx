@@ -9,7 +9,7 @@ const hostArtifacts: HarborArtifact[] = [
   {
     id: "host-tide-notebook",
     title: "Tide Notebook",
-    summary: "A host-supplied field note that stays inside the widget info panel.",
+    summary: "A host-supplied field note that can be selected from the catch overlay.",
     displayMode: "panel",
     payload: {
       source: "widget-demo",

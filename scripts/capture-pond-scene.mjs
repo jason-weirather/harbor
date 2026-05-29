@@ -22,9 +22,11 @@ function parseArgs(argv) {
     height: DEFAULT_HEIGHT,
     move: undefined,
     moveSettleMs: DEFAULT_MOVE_SETTLE_MS,
+    openCatchOverlay: false,
     out: DEFAULT_OUTPUT,
     port: DEFAULT_PORT,
     route: DEFAULT_ROUTE,
+    selector: ".harbor-widget__scene",
     width: DEFAULT_WIDTH,
   };
 
@@ -39,6 +41,12 @@ function parseArgs(argv) {
 
     if (value === "--route") {
       options.route = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === "--selector") {
+      options.selector = argv[index + 1];
       index += 1;
       continue;
     }
@@ -81,6 +89,10 @@ function parseArgs(argv) {
 
     if (value === "--skip-build") {
       options.build = false;
+    }
+
+    if (value === "--open-catch-overlay") {
+      options.openCatchOverlay = true;
     }
 
     if (value === "--move-settle-ms") {
@@ -282,7 +294,12 @@ async function main() {
       await page.waitForTimeout(options.castSettleMs);
     }
 
-    const scene = page.locator(".harbor-widget__scene");
+    if (options.openCatchOverlay) {
+      await page.getByTestId("open-catch-overlay").click();
+      await page.waitForTimeout(250);
+    }
+
+    const scene = page.locator(options.selector);
     await scene.screenshot({
       path: outputPath,
       type: "png",

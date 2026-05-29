@@ -38,9 +38,10 @@ describe("FishingGameShell", () => {
     fireEvent.click(screen.getByTestId("tile-7-4"));
 
     advanceUntil(() => {
-      expect(screen.getByText(/Rail 1\/6/)).toBeInTheDocument();
+      expect(screen.getByTestId("creel-count")).toHaveTextContent("1/6");
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /Open catch overlay/i }));
     expect(screen.getAllByText(/Lantern Koi|Library Carp|Oracle Eel|Clockwork Betta/).length).toBeGreaterThan(0);
   });
 
@@ -51,13 +52,13 @@ describe("FishingGameShell", () => {
 
     expect(screen.getByText(/Walking to bank tile 2:9/)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("tile-7-4"));
-    expect(screen.getByText(/Let the fisher finish walking before you cast again./)).toBeInTheDocument();
+    expect(screen.getByText(/Let the fisher finish walking before you cast again/)).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(1200);
     });
 
-    expect(screen.getByText(/Stand 2:9/)).toBeInTheDocument();
+    expect(screen.getByText(/Moved to bank tile 2:9/)).toBeInTheDocument();
   });
 
   it("refuses water casts that are farther than six tiles away", () => {
@@ -65,10 +66,8 @@ describe("FishingGameShell", () => {
 
     fireEvent.click(screen.getByTestId("tile-12-0"));
 
-    expect(
-      screen.getByText(/That water is too far away. Move closer and cast within 6 squares./),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Rail 0\/6/)).toBeInTheDocument();
+    expect(screen.getByText(/That water is too far away/)).toBeInTheDocument();
+    expect(screen.getByTestId("creel-count")).toHaveTextContent("0/6");
   });
 
   it("keeps fishing the same water tile until the player moves away", () => {
@@ -78,11 +77,11 @@ describe("FishingGameShell", () => {
     fireEvent.click(screen.getByTestId("tile-7-4"));
 
     advanceUntil(() => {
-      expect(screen.getByText(/Rail 1\/6/)).toBeInTheDocument();
+      expect(screen.getByTestId("creel-count")).toHaveTextContent("1/6");
     });
 
     advanceUntil(() => {
-      expect(screen.getByText(/Rail 2\/6/)).toBeInTheDocument();
+      expect(screen.getByTestId("creel-count")).toHaveTextContent("2/6");
     }, 40000);
 
     fireEvent.click(screen.getByTestId("shore-2-9"));
@@ -91,9 +90,8 @@ describe("FishingGameShell", () => {
       vi.advanceTimersByTime(3000);
     });
 
-    expect(screen.getByText(/Stand 2:9/)).toBeInTheDocument();
-    expect(screen.getByText(/Target none/)).toBeInTheDocument();
-    expect(screen.getByText(/Rail 2\/6/)).toBeInTheDocument();
+    expect(screen.getByText(/Moved to bank tile 2:9/)).toBeInTheDocument();
+    expect(screen.getByTestId("creel-count")).toHaveTextContent("2/6");
   });
 
   it("links caught artifacts to the plain reading pages", () => {
@@ -120,6 +118,11 @@ describe("FishingGameShell", () => {
     fireEvent.click(screen.getByTestId("tile-7-4"));
 
     advanceUntil(() => {
+      expect(screen.getByTestId("creel-count")).toHaveTextContent("1/6");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Open catch overlay/i }));
+
+    advanceUntil(() => {
       expect(screen.getByRole("link", { name: /Read artifact:/ })).toHaveAttribute(
         "href",
         "/plain/artifacts/dock-checklist/",
@@ -127,18 +130,16 @@ describe("FishingGameShell", () => {
     });
   });
 
-  it("can minimize and expand the catch rail without hiding the game status", () => {
+  it("opens and closes the catch overlay without hiding the game status", () => {
     render(<FishingGameShell manifest={manifest} />);
 
-    const rail = document.getElementById("catch-rail");
+    expect(screen.getByText(/Move across the left shoreline/)).toBeInTheDocument();
 
-    expect(rail).not.toHaveAttribute("hidden");
-    expect(screen.getByText(/Stand 3:10/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Open catch overlay/i }));
+    expect(screen.getByTestId("catch-overlay")).toBeInTheDocument();
+    expect(screen.getByText(/Move across the left shoreline/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("toggle-hud"));
-
-    expect(rail).toHaveAttribute("hidden");
-    expect(screen.getByRole("button", { name: /Expand rail/i })).toBeInTheDocument();
-    expect(screen.getByText(/Stand 3:10/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Close catch overlay/i }));
+    expect(screen.queryByTestId("catch-overlay")).not.toBeInTheDocument();
   });
 });

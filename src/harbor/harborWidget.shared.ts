@@ -501,7 +501,7 @@ export function getGameStateLabel(gameState: HarborGameMode, isCreelFull: boolea
   }
 
   if (isCreelFull) {
-    return "Rail full";
+    return "Full";
   }
 
   return "Roaming";

@@ -8,6 +8,7 @@ import type {
 
 export type HarborWidgetMode = "standalone" | "embedded" | "background";
 export type HarborArtifactDisplayMode = "auto" | "panel" | "open" | "host";
+export type HarborReleasePolicy = "oldest" | "newest";
 
 export interface HarborArtifact extends PondArtifactRecord {
   id: string;
@@ -28,12 +29,24 @@ export type HarborWidgetManifest<TArtifact = HarborArtifact> = Omit<
 
 export type HarborArtifactAdapter<TArtifact = unknown> = (artifact: TArtifact) => HarborArtifact;
 
+export interface HarborHeldCatch {
+  catch: CatchInstance;
+  artifact?: HarborArtifact;
+  heldIndex: number;
+  isOldest: boolean;
+  isNewest: boolean;
+}
+
 export interface HarborCatchEvent {
   catch: CatchInstance;
   artifact?: HarborArtifact;
   kept: boolean;
   score: number;
   creel: CatchInstance[];
+  creelCapacity: number;
+  heldCatches: HarborHeldCatch[];
+  releasedCatch?: CatchInstance;
+  releasePolicy: HarborReleasePolicy;
 }
 
 export interface HarborWidgetState {
@@ -54,16 +67,20 @@ export interface HarborWidgetState {
   selectedWaterTile?: Tile;
   score: number;
   creel: CatchInstance[];
+  creelCapacity: number;
+  heldCatches: HarborHeldCatch[];
   lastCatch?: CatchInstance;
   selectedArtifact?: HarborArtifact;
   availableArtifacts: HarborArtifact[];
-  isHudCollapsed: boolean;
+  isCatchOverlayOpen: boolean;
+  releasePolicy: HarborReleasePolicy;
 }
 
 export interface HarborWidgetOptions<TArtifact = unknown> {
   manifest: HarborWidgetManifest<TArtifact>;
   title?: string;
   mode?: HarborWidgetMode;
+  maxCreelSize?: number;
   artifactAdapter?: HarborArtifactAdapter<TArtifact>;
   onCatch?: (event: HarborCatchEvent) => void;
   onArtifactSelected?: (artifact: HarborArtifact | undefined) => void;
@@ -73,8 +90,13 @@ export interface HarborWidgetOptions<TArtifact = unknown> {
 
 export interface HarborWidgetHandle {
   getState: () => HarborWidgetState;
+  getHeldCatches: () => HarborHeldCatch[];
   setArtifacts: (artifacts: HarborArtifact[]) => void;
   clearCreel: () => void;
+  releaseCatch: (catchId: string) => void;
+  releaseNextCatch: () => CatchInstance | undefined;
+  setCatchOverlayOpen: (open: boolean) => void;
+  setReleasePolicy: (policy: HarborReleasePolicy) => void;
 }
 
 export interface HarborWidgetController extends HarborWidgetHandle {

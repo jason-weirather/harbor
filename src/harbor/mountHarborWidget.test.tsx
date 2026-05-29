@@ -78,9 +78,17 @@ describe("mountHarborWidget", () => {
     fireEvent.click(ui.getByTestId("tile-7-4"));
 
     advanceUntil(() => {
-      expect(ui.getByText(/Rail 1\/6/)).toBeInTheDocument();
+      expect(ui.getByTestId("creel-count")).toHaveTextContent("1/6");
     });
 
+    expect(controller.getHeldCatches()).toEqual([
+      expect.objectContaining({
+        artifact: expect.objectContaining({ id: "mounted-host-artifact" }),
+        heldIndex: 0,
+      }),
+    ]);
+
+    fireEvent.click(ui.getByRole("button", { name: /Open catch overlay/i }));
     fireEvent.click(ui.getByRole("button", { name: /Show artifact: Mounted Host Artifact/i }));
 
     expect(controller.getState()).toEqual(
@@ -95,6 +103,7 @@ describe("mountHarborWidget", () => {
     });
 
     expect(controller.getState().creel).toHaveLength(0);
+    expect(controller.getHeldCatches()).toHaveLength(0);
 
     act(() => {
       controller.destroy();

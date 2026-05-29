@@ -20,12 +20,14 @@ import {
 } from "../lib/pond/game";
 import { getPlayableTiles } from "../lib/pond/geometry";
 import type { CatchInstance, PondManifest, ShoreTile, Tile } from "../lib/pond/types";
-import CatchRail from "./CatchRail";
+import CatchOverlay from "./CatchOverlay";
 import FishingScene from "./FishingScene";
-import HarborInfoPanel from "./HarborInfoPanel";
+import HarborHudStrip from "./HarborHudStrip";
 import type {
   HarborArtifact,
   HarborArtifactAdapter,
+  HarborHeldCatch,
+  HarborReleasePolicy,
   HarborWidgetHandle,
   HarborWidgetOptions,
   HarborWidgetState,
@@ -161,11 +163,33 @@ function getArtifactActionKind(
   return artifact.url ? "open" : "panel";
 }
 
+function resolveCreelCapacity(maxCreelSize?: number) {
+  if (typeof maxCreelSize !== "number" || !Number.isFinite(maxCreelSize) || maxCreelSize < 1) {
+    return MAX_CREEL_SIZE;
+  }
+
+  return Math.floor(maxCreelSize);
+}
+
+export function buildHeldCatches(
+  creel: CatchInstance[],
+  artifactMap: ReadonlyMap<string, HarborArtifact>,
+): HarborHeldCatch[] {
+  return creel.map((catchItem, heldIndex) => ({
+    catch: catchItem,
+    artifact: catchItem.artifactId ? artifactMap.get(catchItem.artifactId) : undefined,
+    heldIndex,
+    isOldest: heldIndex === 0,
+    isNewest: heldIndex === creel.length - 1,
+  }));
+}
+
 const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(function HarborWidget(
   {
     manifest,
     title = "Harbor Fishing Widget",
     mode = "standalone",
+    maxCreelSize,
     artifactAdapter,
     onCatch,
     onArtifactSelected,
@@ -196,6 +220,9 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   const inspectionStartedAtRef = useRef<number>();
   const encounterRef = useRef<EncounterContext>();
   const widgetStateRef = useRef<HarborWidgetState>();
+  const heldCatchesRef = useRef<HarborHeldCatch[]>([]);
+  const releasePolicyRef = useRef<HarborReleasePolicy>("newest");
+  const creelCapacity = useMemo(() => resolveCreelCapacity(maxCreelSize), [maxCreelSize]);
   const normalizedManifestArtifacts = useMemo(
     () => manifest.artifacts.map((artifact) => normalizeArtifact(artifact, artifactAdapter)),
     [artifactAdapter, manifest.artifacts],
@@ -259,7 +286,8 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   const [castNumber, setCastNumber] = useState(0);
   const [lastCatch, setLastCatch] = useState<CatchInstance>();
   const [activeCatchPreview, setActiveCatchPreview] = useState<CatchInstance>();
-  const [isHudCollapsed, setIsHudCollapsed] = useState(false);
+  const [isCatchOverlayOpen, setIsCatchOverlayOpen] = useState(false);
+  const [releasePolicy, setReleasePolicy] = useState<HarborReleasePolicy>("newest");
   const [selectedArtifact, setSelectedArtifact] = useState<HarborArtifact>();
   const [ambientFish, setAmbientFish] = useState<AmbientFish[]>([]);
   const [ambientEgret, setAmbientEgret] = useState<AmbientEgret>();
@@ -267,7 +295,8 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     "Move across the left shoreline, hover the water to line up a cast, and let the fisher handle the fight.",
   );
 
-  const isCreelFull = creel.length >= MAX_CREEL_SIZE;
+  const heldCatches = useMemo(() => buildHeldCatches(creel, artifactMap), [artifactMap, creel]);
+  const isCreelFull = creel.length >= creelCapacity;
   const activeWaterTile = hoveredWaterTile ?? selectedWaterTile;
   const activeWaterInRange =
     activeWaterTile && isTileWithinCastRange(playerTile, activeWaterTile)
@@ -285,14 +314,6 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   const gameStateLabel = getGameStateLabel(gameState, isCreelFull);
   const encounterFishScale =
     encounterRef.current?.fishScale ?? ambientFishTemplates[0]?.size ?? 1.1;
-
-  function getArtifact(artifactId?: string) {
-    if (!artifactId) {
-      return undefined;
-    }
-
-    return artifactMap.get(artifactId);
-  }
 
   function selectArtifact(nextArtifact?: HarborArtifact) {
     setSelectedArtifact(nextArtifact);
@@ -575,15 +596,40 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     const artifact = catchResult.artifactId
       ? artifactMapRef.current.get(catchResult.artifactId)
       : undefined;
-    const kept = creelRef.current.length < MAX_CREEL_SIZE;
-    const nextCreel = kept ? [...creelRef.current, catchResult] : creelRef.current;
+    const currentCreel = creelRef.current;
+    const releasePolicySnapshot = releasePolicyRef.current;
+    let releasedCatch: CatchInstance | undefined;
+    let kept = true;
+    let nextCreel: CatchInstance[];
+
+    if (currentCreel.length < creelCapacity) {
+      nextCreel = [...currentCreel, catchResult];
+    } else if (releasePolicySnapshot === "oldest") {
+      releasedCatch = currentCreel[0];
+      nextCreel = [...currentCreel.slice(1), catchResult];
+    } else {
+      releasedCatch = catchResult;
+      kept = false;
+      nextCreel = currentCreel;
+    }
+
     const nextScore = scoreRef.current + catchResult.points;
+    const nextHeldCatches = buildHeldCatches(nextCreel, artifactMapRef.current);
 
     creelRef.current = nextCreel;
     scoreRef.current = nextScore;
 
-    if (kept) {
+    if (kept || nextCreel !== currentCreel) {
       setCreel(nextCreel);
+    }
+
+    if (
+      releasedCatch &&
+      releasedCatch.id !== catchResult.id &&
+      releasedCatch.artifactId &&
+      selectedArtifact?.id === releasedCatch.artifactId
+    ) {
+      selectArtifact(undefined);
     }
 
     setScore(nextScore);
@@ -601,7 +647,17 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       kept,
       score: nextScore,
       creel: nextCreel,
+      creelCapacity,
+      heldCatches: nextHeldCatches,
+      releasedCatch,
+      releasePolicy: releasePolicySnapshot,
     });
+
+    const catchStatus = kept
+      ? releasedCatch
+        ? `Creel full. Released oldest catch and kept ${catchResult.displayName}.`
+        : `Caught ${catchResult.displayName}.`
+      : "Creel full. Released the new catch.";
 
     if (selectedWaterRef.current && tileMatches(selectedWaterRef.current, target)) {
       const nextCastNumber = activeCastNumber + 1;
@@ -609,12 +665,8 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       startCastingAtTile(
         target,
         nextCastNumber,
-        kept
-          ? artifact
-            ? `Caught ${catchResult.displayName}. Its artifact is in the rail, and the fisher casts right back out.`
-            : `Caught ${catchResult.displayName} for ${catchResult.points} points. The fisher casts right back out.`
-          : `Caught ${catchResult.displayName} for ${catchResult.points} points, but the rail was full, so it was released after inspection.`,
-        `The line lands back on water tile ${target.row}:${target.col}, and the fisher waits for the next passing shadow.`,
+        catchStatus,
+        `Line back in the water at ${target.row}:${target.col}.`,
       );
       return;
     }
@@ -622,13 +674,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     setActiveCatchPreview(undefined);
     gameStateRef.current = "idle";
     setGameState("idle");
-    setStatusMessage(
-      kept
-        ? artifact
-          ? `Caught ${catchResult.displayName}. Its artifact is waiting in the catch rail.`
-          : `Caught ${catchResult.displayName} for ${catchResult.points} points.`
-        : `Caught ${catchResult.displayName} for ${catchResult.points} points, but released it because the rail was full.`,
-    );
+    setStatusMessage(catchStatus);
   }
 
   function handleMoveToLand(tile: ShoreTile) {
@@ -692,12 +738,15 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   }
 
   function handleChooseWater(tile: Tile) {
-    if (gameState === "walking") {
+    const currentGameState = gameStateRef.current;
+    const currentPlayerTile = playerTileRef.current ?? playerTile;
+
+    if (currentGameState === "walking") {
       setStatusMessage("Let the fisher finish walking before you cast again.");
       return;
     }
 
-    if (gameState !== "idle" && gameState !== "inventory-full") {
+    if (currentGameState !== "idle" && currentGameState !== "inventory-full") {
       return;
     }
 
@@ -705,7 +754,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       return;
     }
 
-    if (!isTileWithinCastRange(playerTile, tile)) {
+    if (!isTileWithinCastRange(currentPlayerTile, tile)) {
       setHoveredWaterTile(tile);
       setStatusMessage(
         `That water is too far away. Move closer and cast within ${CAST_RANGE_TILES} squares.`,
@@ -727,10 +776,14 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     );
   }
 
-  function handleThrowBack(catchId: string) {
-    const released = creel.find((item) => item.id === catchId);
-    const nextCreel = creel.filter((item) => item.id !== catchId);
+  function releaseCatchById(catchId: string) {
+    const released = creelRef.current.find((item) => item.id === catchId);
 
+    if (!released) {
+      return undefined;
+    }
+
+    const nextCreel = creelRef.current.filter((item) => item.id !== catchId);
     creelRef.current = nextCreel;
     setCreel(nextCreel);
     if (released?.artifactId && selectedArtifact?.id === released.artifactId) {
@@ -746,16 +799,33 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       gameStateRef.current = "idle";
       setGameState("idle");
     }
-    setStatusMessage(
-      released
-        ? `Threw back ${released.displayName}. There is room in the rail again.`
-        : "Opened a slot in the catch rail.",
-    );
+    setStatusMessage(`Released ${released.displayName}.`);
+
+    return released;
+  }
+
+  function releaseNextCatch() {
+    const nextRelease =
+      releasePolicyRef.current === "oldest"
+        ? creelRef.current[0]
+        : creelRef.current[creelRef.current.length - 1];
+
+    if (!nextRelease) {
+      setStatusMessage("No fish held yet.");
+      return undefined;
+    }
+
+    return releaseCatchById(nextRelease.id);
+  }
+
+  function updateReleasePolicy(policy: HarborReleasePolicy) {
+    releasePolicyRef.current = policy;
+    setReleasePolicy(policy);
   }
 
   function handleArtifactPanelSelection(artifact: HarborArtifact) {
     selectArtifact(artifact);
-    setStatusMessage(`Keeping ${artifact.title} in the info panel while the pond keeps running.`);
+    setStatusMessage(`Selected ${artifact.title}.`);
   }
 
   function clearCreelState() {
@@ -766,7 +836,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
       gameStateRef.current = "idle";
       setGameState("idle");
     }
-    setStatusMessage("Cleared the catch rail. The shoreline is ready for another run.");
+    setStatusMessage("Cleared catch.");
   }
 
   function getArtifactAction(artifact: HarborArtifact) {
@@ -802,6 +872,14 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   useEffect(() => {
     creelRef.current = creel;
   }, [creel]);
+
+  useEffect(() => {
+    heldCatchesRef.current = heldCatches;
+  }, [heldCatches]);
+
+  useEffect(() => {
+    releasePolicyRef.current = releasePolicy;
+  }, [releasePolicy]);
 
   useEffect(() => {
     normalizedManifestRef.current = normalizedManifest;
@@ -1049,10 +1127,13 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     selectedWaterTile: sceneWaterTile,
     score,
     creel,
+    creelCapacity,
+    heldCatches,
     lastCatch,
     selectedArtifact,
     availableArtifacts,
-    isHudCollapsed,
+    isCatchOverlayOpen,
+    releasePolicy,
   };
   widgetStateRef.current = widgetState;
 
@@ -1064,11 +1145,22 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     ref,
     () => ({
       getState: () => widgetStateRef.current ?? widgetState,
+      getHeldCatches: () => widgetStateRef.current?.heldCatches ?? heldCatchesRef.current,
       setArtifacts: (artifacts) => {
         setHostArtifacts(artifacts);
       },
       clearCreel: () => {
         clearCreelState();
+      },
+      releaseCatch: (catchId) => {
+        releaseCatchById(catchId);
+      },
+      releaseNextCatch: () => releaseNextCatch(),
+      setCatchOverlayOpen: (open) => {
+        setIsCatchOverlayOpen(open);
+      },
+      setReleasePolicy: (policy) => {
+        updateReleasePolicy(policy);
       },
     }),
     [widgetState],
@@ -1076,57 +1168,58 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
 
   return (
     <section
-      className={`harbor-widget harbor-widget--${mode}${isHudCollapsed ? " is-hud-collapsed" : ""}`}
+      className={`harbor-widget harbor-widget--${mode}`}
       aria-label="Pixel fishing prototype"
     >
-      <FishingScene
-        manifest={normalizedManifest}
-        playerTile={playerTile}
-        selectedWaterTile={selectedWaterTile}
-        hoveredWaterTile={hoveredWaterTile}
-        gameState={gameState}
-        activeCatchPreview={activeCatchPreview}
-        ambientFish={ambientFish}
-        ambientEgret={ambientEgret}
-        movement={movementRef.current}
-        castingStartedAt={castingStartedAtRef.current}
-        reelingStartedAt={reelingStartedAtRef.current}
-        reelDuration={reelDurationRef.current}
-        approachStartedAt={approachStartedAtRef.current}
-        approachDirection={approachDirectionRef.current}
-        encounterFishScale={encounterFishScale}
-        onMoveToLand={handleMoveToLand}
-        onChooseWater={handleChooseWater}
-        onHoverWater={setHoveredWaterTile}
-      />
-
-      <footer className="harbor-widget__panel" aria-label="Catch rail">
-        <HarborInfoPanel
-          title={title}
-          statusHeading={statusHeading}
-          statusMessage={statusMessage}
+      <div className="harbor-widget__stage">
+        <FishingScene
+          manifest={normalizedManifest}
           playerTile={playerTile}
-          targetTile={sceneWaterTile}
-          score={score}
-          railCount={creel.length}
-          gameStateLabel={gameStateLabel}
-          isHudCollapsed={isHudCollapsed}
-          lastCatch={lastCatch}
-          selectedArtifact={selectedArtifact}
-          selectedArtifactAction={
-            selectedArtifact ? getArtifactAction(selectedArtifact) : undefined
-          }
-          onToggleHud={() => setIsHudCollapsed((current) => !current)}
+          selectedWaterTile={selectedWaterTile}
+          hoveredWaterTile={hoveredWaterTile}
+          gameState={gameState}
+          activeCatchPreview={activeCatchPreview}
+          ambientFish={ambientFish}
+          ambientEgret={ambientEgret}
+          movement={movementRef.current}
+          castingStartedAt={castingStartedAtRef.current}
+          reelingStartedAt={reelingStartedAtRef.current}
+          reelDuration={reelDurationRef.current}
+          approachStartedAt={approachStartedAtRef.current}
+          approachDirection={approachDirectionRef.current}
+          encounterFishScale={encounterFishScale}
+          onMoveToLand={handleMoveToLand}
+          onChooseWater={handleChooseWater}
+          onHoverWater={setHoveredWaterTile}
         />
-        <CatchRail
-          creel={creel}
-          hidden={isHudCollapsed}
-          selectedArtifact={selectedArtifact}
-          getArtifact={getArtifact}
-          getArtifactAction={getArtifactAction}
-          onThrowBack={handleThrowBack}
-        />
-      </footer>
+        {isCatchOverlayOpen ? (
+          <CatchOverlay
+            creelCapacity={creelCapacity}
+            heldCatches={heldCatches}
+            releasePolicy={releasePolicy}
+            selectedArtifact={selectedArtifact}
+            getArtifactAction={getArtifactAction}
+            onClose={() => setIsCatchOverlayOpen(false)}
+            onReleaseCatch={(catchId) => {
+              releaseCatchById(catchId);
+            }}
+            onReleaseNext={() => {
+              releaseNextCatch();
+            }}
+            onReleasePolicyChange={updateReleasePolicy}
+          />
+        ) : null}
+      </div>
+
+      <HarborHudStrip
+        creelCapacity={creelCapacity}
+        creelCount={creel.length}
+        gameStateLabel={gameStateLabel}
+        isCatchOverlayOpen={isCatchOverlayOpen}
+        score={score}
+        statusMessage={statusMessage}
+        onOpenCatchOverlay={() => setIsCatchOverlayOpen(true)}
+      />
     </section>
   );
 });

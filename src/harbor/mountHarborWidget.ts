@@ -38,5 +38,20 @@ export function mountHarborWidget(
     clearCreel() {
       widgetRef.current?.clearCreel();
     },
+    getHeldCatches() {
+      return widgetRef.current?.getHeldCatches() ?? [];
+    },
+    releaseCatch(catchId) {
+      widgetRef.current?.releaseCatch(catchId);
+    },
+    releaseNextCatch() {
+      return widgetRef.current?.releaseNextCatch();
+    },
+    setCatchOverlayOpen(open) {
+      widgetRef.current?.setCatchOverlayOpen(open);
+    },
+    setReleasePolicy(policy) {
+      widgetRef.current?.setReleasePolicy(policy);
+    },
   };
 }

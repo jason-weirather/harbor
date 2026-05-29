@@ -137,7 +137,10 @@ export default function FishingScene({
       defaultPlayerTile,
     [defaultPlayerTile, manifest.pond.shoreline],
   );
-  const backdropTiles = useMemo(() => buildBackdropTiles(), []);
+  const backdropTiles = useMemo(
+    () => buildBackdropTiles(manifest.pond.mask, manifest.pond.shoreline),
+    [manifest.pond.mask, manifest.pond.shoreline],
+  );
   const [sceneSize, setSceneSize] = useState(manifest.pond.viewBox);
 
   useEffect(() => {

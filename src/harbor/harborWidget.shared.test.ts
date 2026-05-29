@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEgretPerchCandidates,
   chooseEgretPerchCandidate,
+  filterEgretPerchCandidatesForSafeBoard,
   getEgretPerchPlayerBiasWeight,
 } from "./harborWidget.shared";
 import type { ShoreTile, Tile } from "../lib/pond/types";
@@ -55,5 +56,33 @@ describe("harbor widget shared helpers", () => {
       getEgretPerchPlayerBiasWeight(distantPerch, playerTile),
     );
     expect(getEgretPerchPlayerBiasWeight(distantPerch, playerTile)).toBe(1);
+  });
+
+  it("filters egret perches away from the soft board edges", () => {
+    const mask = [
+      "11110000",
+      "11110000",
+      "11110000",
+      "11110000",
+      "11110000",
+      "11110000",
+      "11110000",
+    ];
+    const edgePerch: ShoreTile = { row: 0, col: 4, terrain: "sand", castable: true };
+    const safePerch: ShoreTile = { row: 3, col: 4, terrain: "sand", castable: true };
+    const candidates = [
+      {
+        perchTile: edgePerch,
+        targetWaterTile: { row: 0, col: 3 },
+        direction: -1 as const,
+      },
+      {
+        perchTile: safePerch,
+        targetWaterTile: { row: 3, col: 3 },
+        direction: -1 as const,
+      },
+    ];
+
+    expect(filterEgretPerchCandidatesForSafeBoard(candidates, mask)).toEqual([candidates[1]]);
   });
 });

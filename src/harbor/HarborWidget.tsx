@@ -59,12 +59,14 @@ import {
   buildWaterNeighborMap,
   chooseEgretPerchCandidate,
   chooseNextSwimTile,
+  filterEgretPerchCandidatesForSafeBoard,
   findShorePath,
   getAmbientFishBaseSize,
   getGameStateLabel,
   getMinimumTileDistance,
   getStatusHeading,
   getTileKey,
+  isTileInsideEgretSafeBoard,
   isTileWithinCastRange,
   randomBetween,
   tileMatches,
@@ -264,8 +266,12 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
   );
   const waterNeighborMap = useMemo(() => buildWaterNeighborMap(waterTiles), [waterTiles]);
   const egretPerchCandidates = useMemo(
-    () => buildEgretPerchCandidates(manifest.pond.shoreline, waterTiles),
-    [manifest.pond.shoreline, waterTiles],
+    () =>
+      filterEgretPerchCandidatesForSafeBoard(
+        buildEgretPerchCandidates(manifest.pond.shoreline, waterTiles),
+        manifest.pond.mask,
+      ),
+    [manifest.pond.mask, manifest.pond.shoreline, waterTiles],
   );
   const ambientFishTemplates = useMemo(
     () =>
@@ -1016,7 +1022,11 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
           const approachCandidates =
             waterNeighborMap
               .get(getTileKey(nextEgret.targetWaterTile))
-              ?.filter((tile) => !tileMatches(tile, nextEgret?.targetWaterTile)) ?? [];
+              ?.filter(
+                (tile) =>
+                  !tileMatches(tile, nextEgret?.targetWaterTile) &&
+                  isTileInsideEgretSafeBoard(tile, manifest.pond.mask, 1, 1),
+              ) ?? [];
           const approachTile =
             approachCandidates[Math.floor(random() * approachCandidates.length)] ??
             fish.toTile;
@@ -1111,7 +1121,7 @@ const HarborWidget = forwardRef<HarborWidgetHandle, HarborWidgetOptions>(functio
     }, AMBIENT_LOGIC_TICK_MS);
 
     return () => window.clearInterval(interval);
-  }, [egretPerchCandidates, waterNeighborMap]);
+  }, [egretPerchCandidates, manifest.pond.mask, waterNeighborMap]);
 
   useEffect(() => {
     return () => clearTimers(timerRef);

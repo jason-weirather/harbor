@@ -1,4 +1,4 @@
-import type { Tile } from "../../lib/pond/types";
+import type { ShoreTile, Tile } from "../../lib/pond/types";
 import type { HarborSpriteName } from "./SpriteAtlas";
 
 export type BackdropTerrain = "water" | "water-deep" | "sand" | "grass";
@@ -163,31 +163,76 @@ export const SCENE_PROP_PLACEMENTS: ScenePropPlacement[] = [
   },
 ];
 
-function getBackdropTerrain(row: number, col: number): BackdropTerrain {
-  const shoreline = 12 - row * 0.28;
+function getWaterEdgeByRow(mask: string[]) {
+  return mask.map((row) => {
+    const firstLandCol = row.indexOf("0");
 
-  if (col >= shoreline + 2.6) {
+    return firstLandCol === -1 ? row.length : firstLandCol;
+  });
+}
+
+function getExtrapolatedWaterEdge(row: number, waterEdges: number[]) {
+  if (waterEdges.length === 0) {
+    return 8;
+  }
+
+  if (row < 0) {
+    const leadSlope = ((waterEdges[3] ?? waterEdges[0]) - waterEdges[0]) / 3;
+
+    return waterEdges[0] + row * Math.max(0.35, leadSlope);
+  }
+
+  if (row >= waterEdges.length) {
+    const lastIndex = waterEdges.length - 1;
+    const tailSlope = (waterEdges[lastIndex] - (waterEdges[lastIndex - 3] ?? waterEdges[lastIndex])) / 3;
+
+    return waterEdges[lastIndex] + (row - lastIndex) * Math.min(-0.35, tailSlope);
+  }
+
+  return waterEdges[row];
+}
+
+function getBackdropTerrain(row: number, col: number, waterEdges: number[]): BackdropTerrain {
+  const waterEdge = getExtrapolatedWaterEdge(row, waterEdges);
+  const grassEdgeNoise = ((row * 17 + col * 11) % 5) * 0.08;
+
+  if (col >= waterEdge + 3.15 + grassEdgeNoise) {
     return "grass";
   }
 
-  if (col >= shoreline + 1.1) {
+  if (col >= waterEdge - 0.2) {
     return "sand";
   }
 
-  return (row + col) % 2 === 0 ? "water" : "water-deep";
+  return col <= waterEdge - 5.5 || (row + col) % 3 === 0 ? "water-deep" : "water";
 }
 
-export function buildBackdropTiles(): BackdropTile[] {
+export function buildBackdropTiles(mask: string[], shoreline: ShoreTile[]): BackdropTile[] {
   const tiles: BackdropTile[] = [];
+  const waterEdges = getWaterEdgeByRow(mask);
+  const rowMin = -30;
+  const rowMax = mask.length + 26;
+  const colMax = Math.max(...mask.map((row) => row.length), 20) + 28;
+  const colMin = -28;
 
-  for (let row = -14; row <= 32; row += 1) {
-    for (let col = -12; col <= 34; col += 1) {
+  for (let row = rowMin; row <= rowMax; row += 1) {
+    for (let col = colMin; col <= colMax; col += 1) {
       tiles.push({
         row,
         col,
-        terrain: getBackdropTerrain(row, col),
+        terrain: getBackdropTerrain(row, col, waterEdges),
       });
     }
+  }
+
+  for (const tile of shoreline) {
+    const terrain = tile.dock ? "sand" : tile.terrain ?? "grass";
+
+    tiles.push({
+      row: tile.row,
+      col: tile.col,
+      terrain: terrain === "dock" || terrain === "path" ? "sand" : terrain,
+    });
   }
 
   return tiles;

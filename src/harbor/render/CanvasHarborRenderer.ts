@@ -109,6 +109,22 @@ function drawDiamond(
   }
 }
 
+function isDiamondInViewport(
+  frame: CanvasHarborFrame,
+  centerX: number,
+  centerY: number,
+  halfWidth: number,
+  halfHeight: number,
+  margin = 0,
+) {
+  return (
+    centerX + halfWidth >= -margin &&
+    centerX - halfWidth <= frame.camera.viewportWidth + margin &&
+    centerY + halfHeight >= -margin &&
+    centerY - halfHeight <= frame.camera.viewportHeight + margin
+  );
+}
+
 function drawPixelRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -229,16 +245,17 @@ function drawWaterRippleSprite(
 ) {
   getSpriteFrame(asset);
   const pixel = Math.max(1, Math.round(scale * 0.64));
-  const drift = Math.sin(time / 420 + variant * 0.73) * pixel * 1.4;
-  const pulse = 0.58 + Math.sin(time / 520 + variant) * 0.2;
+  const drift = Math.sin(time / 260 + variant * 0.73) * pixel * 2.2;
+  const bob = Math.cos(time / 310 + variant * 0.37) * pixel * 0.8;
+  const pulse = 0.66 + Math.sin(time / 300 + variant) * 0.3;
   const colors = [
-    `rgba(224, 254, 255, ${0.34 * alpha * pulse})`,
-    `rgba(121, 215, 222, ${0.26 * alpha})`,
-    `rgba(15, 79, 111, ${0.14 * alpha})`,
+    `rgba(229, 255, 252, ${0.46 * alpha * pulse})`,
+    `rgba(89, 211, 222, ${0.34 * alpha})`,
+    `rgba(8, 75, 111, ${0.2 * alpha})`,
   ];
 
   ctx.save();
-  ctx.translate(Math.round(x + drift), Math.round(y));
+  ctx.translate(Math.round(x + drift), Math.round(y + bob));
   ctx.lineCap = "square";
   ctx.lineWidth = Math.max(1, pixel);
   ctx.strokeStyle = colors[0];
@@ -277,9 +294,11 @@ function drawWaterTileDetails(
   detailScale: number,
   deep = false,
 ) {
-  const density = deep ? 0.62 : 0.78;
+  const density = deep ? 0.82 : 0.96;
   const first = getDeterministicNoise(variant, 2, 9);
   const second = getDeterministicNoise(variant, 7, 12);
+  const pixel = Math.max(1, Math.round(detailScale * 0.52));
+  const currentPhase = ((time / 54 + variant * 3.7) % 38) - 19;
 
   drawWaterRippleSprite(
     ctx,
@@ -303,6 +322,18 @@ function drawWaterTileDetails(
       detailScale * 0.78,
       density * 0.66,
     );
+  }
+
+  if (first > 0.36) {
+    const alpha = (deep ? 0.2 : 0.32) + Math.max(0, Math.sin(time / 440 + variant)) * 0.22;
+    const brightCurrent = `rgba(222, 255, 248, ${alpha})`;
+    const tealCurrent = `rgba(78, 195, 207, ${alpha * 0.72})`;
+
+    ctx.save();
+    ctx.translate(Math.round(x + currentPhase * pixel * 0.22), Math.round(y));
+    drawPixelRect(ctx, -13 * pixel, -7 * pixel, 7 * pixel, pixel, brightCurrent);
+    drawPixelRect(ctx, 3 * pixel, 8 * pixel, 8 * pixel, pixel, tealCurrent);
+    ctx.restore();
   }
 }
 
@@ -1011,24 +1042,24 @@ function drawNamedSprite(
 }
 
 function getWaterFill(tile: Tile, isNearShore: boolean, variant: number) {
-  const depth = clamp((tile.col + tile.row * 0.18 - 4) / 17, 0, 1);
-  const patch = getDeterministicNoise(Math.floor(tile.row / 5), Math.floor(tile.col / 5), 8);
-  const deepened = clamp(depth * 0.58 + patch * 0.08 - (isNearShore ? 0.2 : 0), 0, 1);
+  const offshoreDepth = clamp((8.8 - tile.col + tile.row * 0.03) / 14, 0, 1);
+  const patch = getDeterministicNoise(Math.floor(tile.row / 4), Math.floor(tile.col / 4), 8);
+  const deepened = clamp(offshoreDepth * 0.58 + patch * 0.035 - (isNearShore ? 0.2 : 0), 0, 1);
   const base = mixHex(HARBOR_PALETTE.waterMid, HARBOR_PALETTE.waterDeep, deepened);
-  const surface = mixHex(base, HARBOR_PALETTE.waterNight, patch > 0.72 ? 0.07 : 0.02);
+  const surface = mixHex(base, HARBOR_PALETTE.waterNight, patch > 0.72 ? 0.06 : 0.025);
 
   if (isNearShore) {
-    return mixHex(surface, "#7fd5c0", 0.18 + (variant % 3) * 0.015);
+    return mixHex(surface, HARBOR_PALETTE.waterShallow, 0.3 + (variant % 3) * 0.012);
   }
 
   return surface;
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame) {
-  const gradient = ctx.createLinearGradient(0, 0, 0, frame.camera.viewportHeight);
-  gradient.addColorStop(0, HARBOR_PALETTE.skyTop);
-  gradient.addColorStop(0.46, HARBOR_PALETTE.skyBottom);
-  gradient.addColorStop(1, "#72c7d0");
+  const gradient = ctx.createLinearGradient(0, 0, frame.camera.viewportWidth, frame.camera.viewportHeight);
+  gradient.addColorStop(0, mixHex(HARBOR_PALETTE.waterMid, HARBOR_PALETTE.waterShallow, 0.2));
+  gradient.addColorStop(0.52, HARBOR_PALETTE.waterMid);
+  gradient.addColorStop(1, mixHex(HARBOR_PALETTE.waterDeep, HARBOR_PALETTE.waterNight, 0.22));
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, frame.camera.viewportWidth, frame.camera.viewportHeight);
 }
@@ -1042,18 +1073,50 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, d
     const isWater = tile.terrain.startsWith("water");
     const variant = tile.row + tile.col;
 
-    drawDiamond(
-      ctx,
-      center.x,
-      center.y,
-      halfWidth,
-      halfHeight,
-      isWater ? mixHex(HARBOR_PALETTE.waterMid, HARBOR_PALETTE.waterDeep, 0.16) : getTileFill(tile.terrain),
-      isWater ? "rgba(64, 163, 181, 0)" : "rgba(62, 98, 59, 0.18)",
-      isWater ? 0 : 0.8,
-    );
+    if (!isDiamondInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width * 2)) {
+      continue;
+    }
 
-    if (!isWater) {
+    if (isWater) {
+      ctx.save();
+      ctx.globalAlpha = 0.72;
+      drawDiamond(
+        ctx,
+        center.x,
+        center.y,
+        halfWidth,
+        halfHeight,
+        getWaterFill(tile, tile.terrain === "water", variant),
+        "rgba(64, 163, 181, 0)",
+        0,
+      );
+      ctx.restore();
+    } else {
+      drawDiamond(
+        ctx,
+        center.x,
+        center.y,
+        halfWidth,
+        halfHeight,
+        getTileFill(tile.terrain),
+        "rgba(62, 98, 59, 0.18)",
+        0.8,
+      );
+    }
+
+    if (isWater) {
+      if ((variant + Math.round(tile.row * 0.5)) % 4 === 0) {
+        drawWaterTileDetails(
+          ctx,
+          center.x,
+          center.y,
+          frame.time * 0.9,
+          variant,
+          detailScale * 0.82,
+          tile.terrain === "water-deep",
+        );
+      }
+    } else {
       drawGroundTileDetails(ctx, center.x, center.y, tile.terrain, variant, detailScale);
     }
   }
@@ -1071,7 +1134,6 @@ function drawWater(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, deta
     const isNearShore = frame.nearShoreWaterKeys.has(getTileKey(tile));
     const variant = tile.row * 7 + tile.col * 11;
     const fill = getWaterFill(tile, isNearShore, variant);
-    const underFill = mixHex(fill, HARBOR_PALETTE.waterNight, 0.18);
     const normalStroke = "rgba(54, 139, 164, 0)";
     const stroke =
       isHovered || isSelected
@@ -1080,16 +1142,12 @@ function drawWater(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, deta
           : "rgba(239, 68, 68, 0.42)"
         : normalStroke;
 
-    drawDiamond(
-      ctx,
-      center.x,
-      center.y + 2,
-      halfWidth,
-      halfHeight,
-      underFill,
-      "rgba(8, 48, 72, 0)",
-      0,
-    );
+    if (!isDiamondInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width)) {
+      continue;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = isHovered || isSelected ? 0.96 : 0.84;
     drawDiamond(
       ctx,
       center.x,
@@ -1100,6 +1158,7 @@ function drawWater(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, deta
       stroke,
       isHovered || isSelected ? 1.4 : 0,
     );
+    ctx.restore();
     drawWaterTileDetails(ctx, center.x, center.y, frame.time, variant, detailScale, !isNearShore);
 
     if (isNearShore) {
@@ -1128,6 +1187,10 @@ function drawShore(ctx: CanvasRenderingContext2D, frame: CanvasHarborFrame, deta
     const shoreTerrain = tile.dock ? "path" : tile.terrain;
     const tileFill = getTileFill(shoreTerrain, tile.dock);
     const shadowFill = shoreTerrain === "path" ? "#ad8759" : "#557b46";
+
+    if (!isDiamondInViewport(frame, center.x, center.y, halfWidth, halfHeight, frame.camera.tileSize.width)) {
+      continue;
+    }
 
     drawDiamond(
       ctx,

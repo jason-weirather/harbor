@@ -86,6 +86,8 @@ export const EGRET_EAT_MS = 6500;
 export const EGRET_LEAVE_MS = 5200;
 export const EGRET_PLAYER_BIAS_RANGE_TILES = 4;
 export const EGRET_PLAYER_BIAS_WEIGHT = 0.4;
+export const EGRET_SAFE_ROW_INSET_TILES = 2;
+export const EGRET_SAFE_WATER_COL_INSET_TILES = 1;
 export const CAST_ANIMATION_MS = 760;
 export const WALK_SEGMENT_MS = 190;
 export const INITIAL_AMBIENT_BLUEPRINTS = [
@@ -268,6 +270,39 @@ export function chooseEgretPerchCandidate(
   }
 
   return weightedCandidates.at(-1)?.candidate;
+}
+
+export function isTileInsideEgretSafeBoard(
+  tile: Tile,
+  mask: string[],
+  rowInset = EGRET_SAFE_ROW_INSET_TILES,
+  colInset = EGRET_SAFE_WATER_COL_INSET_TILES,
+) {
+  const rowCount = mask.length;
+  const colCount = Math.max(...mask.map((row) => row.length), 0);
+
+  if (rowCount === 0 || colCount === 0) {
+    return true;
+  }
+
+  return (
+    tile.row >= rowInset &&
+    tile.row <= rowCount - 1 - rowInset &&
+    tile.col >= colInset &&
+    tile.col <= colCount - 1 - colInset
+  );
+}
+
+export function filterEgretPerchCandidatesForSafeBoard(
+  candidates: EgretPerchCandidate[],
+  mask: string[],
+) {
+  return candidates.filter((candidate) => {
+    return (
+      isTileInsideEgretSafeBoard(candidate.perchTile, mask) &&
+      isTileInsideEgretSafeBoard(candidate.targetWaterTile, mask)
+    );
+  });
 }
 
 export function getMinimumTileDistance(origin: Tile, targets: Tile[]) {

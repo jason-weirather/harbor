@@ -1,10 +1,10 @@
 export const HARBOR_PALETTE = {
   skyTop: "#bfe9f1",
   skyBottom: "#84d5dc",
-  waterShallow: "#6ccfc0",
-  waterMid: "#318aa5",
-  waterDeep: "#123f5c",
-  waterNight: "#0d2d43",
+  waterShallow: "#59d7c5",
+  waterMid: "#208cad",
+  waterDeep: "#0c4770",
+  waterNight: "#082b49",
   foam: "rgba(236, 255, 255, 0.78)",
   wetSand: "#caa56d",
   sand: "#e7cf89",
@@ -38,16 +38,27 @@ export function getDeterministicNoise(a: number, b: number, seed = 0) {
 }
 
 export function mixHex(base: string, tint: string, amount: number) {
-  const normalize = (value: string) => value.replace("#", "");
-  const source = normalize(base);
-  const target = normalize(tint);
-  const toRgb = (value: string) => ({
-    r: Number.parseInt(value.slice(0, 2), 16),
-    g: Number.parseInt(value.slice(2, 4), 16),
-    b: Number.parseInt(value.slice(4, 6), 16),
-  });
-  const from = toRgb(source);
-  const to = toRgb(target);
+  const toRgb = (value: string) => {
+    const rgbMatch = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value);
+
+    if (rgbMatch) {
+      return {
+        r: Number.parseInt(rgbMatch[1], 10),
+        g: Number.parseInt(rgbMatch[2], 10),
+        b: Number.parseInt(rgbMatch[3], 10),
+      };
+    }
+
+    const hex = value.replace("#", "");
+
+    return {
+      r: Number.parseInt(hex.slice(0, 2), 16),
+      g: Number.parseInt(hex.slice(2, 4), 16),
+      b: Number.parseInt(hex.slice(4, 6), 16),
+    };
+  };
+  const from = toRgb(base);
+  const to = toRgb(tint);
   const blend = (start: number, end: number) =>
     Math.round(start + (end - start) * clamp(amount, 0, 1));
 

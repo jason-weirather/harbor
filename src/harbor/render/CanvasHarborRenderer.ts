@@ -1577,13 +1577,19 @@ function getAnimatedPlayerCenter(frame: CanvasHarborFrame, time: number, detailS
   return { center, mode };
 }
 
-function getEgretPose(egret: AmbientEgret, frame: CanvasHarborFrame, detailScale: number): EgretRenderPose {
+function getEgretPose(
+  egret: AmbientEgret,
+  frame: CanvasHarborFrame,
+  detailScale: number,
+  egretScale: number,
+): EgretRenderPose {
   const perchCenter = projectRaisedLandTile(frame, egret.perchTile, detailScale);
   const targetCenter = frame.projectSceneTile(egret.targetWaterTile);
   const waterDirection = targetCenter.x >= perchCenter.x ? 1 : -1;
+  const standingFootOffset = 22 * egretScale;
   const perchPoint = {
     x: perchCenter.x,
-    y: perchCenter.y - frame.camera.tileSize.height * 0.18,
+    y: perchCenter.y - standingFootOffset,
   };
   const elapsed = Math.max(0, frame.time - egret.stateStartedAt);
 
@@ -2022,8 +2028,8 @@ export function drawCanvasHarborFrame(ctx: CanvasRenderingContext2D, frame: Canv
   }
 
   if (frame.ambientEgret) {
-    const pose = getEgretPose(frame.ambientEgret, frame, detailScale);
     const egretScale = Math.max(1.28, Math.min(1.95, detailScale * 0.31));
+    const pose = getEgretPose(frame.ambientEgret, frame, detailScale, egretScale);
     drawables.push({
       id: frame.ambientEgret.id,
       layer: "characters",
